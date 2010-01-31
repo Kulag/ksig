@@ -19,6 +19,7 @@ use warnings;
 
 use Carp qw(carp croak);
 use Config::YAML;
+use DBI::SpeedySimple;
 use File::HomeDir;
 
 mkdir File::HomeDir->my_home . "/.ksig" if !-d File::HomeDir->my_home . "/.ksig";
@@ -38,5 +39,7 @@ my $conf = Config::YAML->new(
 	admins => [],
 );
 $conf->read(File::HomeDir->my_home . "/.ksig/config") if -f File::HomeDir->my_home . "/.ksig/config";
+
+my $db = DBI::SpeedySimple->new("dbi:SQLite:" . File::HomeDir->my_home . "/.ksig/db");
 
 $conf->write;
