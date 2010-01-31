@@ -19,3 +19,25 @@ use utf8;
 use warnings;
 
 use Carp qw(carp croak);
+use Config::YAML;
+use File::HomeDir;
+
+mkdir File::HomeDir->my_home . "/.ksig" if !-d File::HomeDir->my_home . "/.ksig";
+
+my $conf = Config::YAML->new(
+	config => "/usr/share/ksig/config",
+	output => File::HomeDir->my_home . "/.ksig/config",
+	pixiv_username => undef,
+	pixiv_password => undef,
+	danbooru_username => undef,
+	danbooru_password => undef,
+	irc_nick => "ksig",
+	irc_servers => {
+		"irc.exampleserver.net" => { "#channel" => "key" },
+	},
+	output_folder => File::HomeDir->my_home . "/ksig",
+	admins => [],
+);
+$conf->read(File::HomeDir->my_home . "/.ksig/config") if -f File::HomeDir->my_home . "/.ksig/config";
+
+$conf->write;
