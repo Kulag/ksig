@@ -13,7 +13,6 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-use lib "."; # FIXME: Shouldn't loading this stuff be handled somehow else?
 use strict;
 use utf8;
 use warnings;
