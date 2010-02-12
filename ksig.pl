@@ -1,5 +1,5 @@
 #!/usr/bin/perl
-# Copyright (c) 2009, Kulag <g.kulag@gmail.com>
+# Copyright (c) 2010, Kulag <g.kulag@gmail.com>
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -19,9 +19,21 @@ use warnings;
 
 use Carp qw(carp croak);
 use Config::YAML;
+use Data::Dumper;
+use DateTime;
 use DBI::SpeedySimple;
+use Digest::SHA1 qw(sha1_hex);
+use Encode;
+use File::Path qw(make_path);
+use HTTP::Cookies;
 use File::HomeDir;
+use HTTP::Request;
+use HTTP::Request::Common;
+use List::Util qw(max min);
 use POE qw(Component::Client::HTTP Component::IRC::State Component::IRC::Plugin::AutoJoin Component::IRC::Plugin::Connector Component::IRC::Plugin::NickReclaim);
+use POSIX qw(ceil floor);
+use Time::HiRes;
+use XML::Simple;
 
 use constant CONCURRENT_REQS => 5;
 use constant SPEED_AVG_WINDOW => 4000; # milliseconds, integer
@@ -42,10 +54,13 @@ my $conf = Config::YAML->new(
 	},
 	output_folder => File::HomeDir->my_home . "/ksig",
 	admins => [],
+	timezone => 'UTC',
+	pixiv_bookmark_new_illust_last_id => 0,
 );
 $conf->read(File::HomeDir->my_home . "/.ksig/config") if -f File::HomeDir->my_home . "/.ksig/config";
 
 my $db = DBI::SpeedySimple->new("dbi:SQLite:" . File::HomeDir->my_home . "/.ksig/db");
+$db->{dbh}->do("CREATE TABLE IF NOT EXISTS fetchqueue (qid integer primary key autoincrement, `type` text, `id` text, `domain` text, `when` int, `count`, int, `nick` text, `text` text, `desc` text, `uri` text, `from` text, `file_name_ending` text, `file_dir` text, recurse int);");
 
 POE::Component::Client::HTTP->spawn(
 	Alias => 'http',
@@ -59,7 +74,7 @@ POE::Component::Client::HTTP->spawn(
 		timeout       => 10,
 	),
 	CookieJar => HTTP::Cookies->new(
-		file => File::HomeDir->my_home . "/ksig/cookies",
+		file => File::HomeDir->my_home . "/.ksig/cookies",
 		autosave => 1,
 	),
 );
@@ -134,7 +149,7 @@ POE::Session->create(
 		irc_msg => sub {
 			my($kernel, $sender, $who, $where, $what) = @_[KERNEL, SENDER, ARG0, ARG1, ARG2];
 			my $allowed = 0;
-			for(@{$allowed_users}) {
+			for(@{$conf->{admins}}) {
 				if($who =~ $_->{regex}) {
 					$allowed = $_;
 					last;
@@ -160,7 +175,7 @@ POE::Session->create(
 					} elsif(/http:\/\//i) {
 						$kernel->yield(queue => {from => $who, type => "file", uri => $what});
 					} elsif(/^pixivbni(?:#(\d+))?/i) {
-						my $id = (defined $1 ? int($1) : ($db->fetch("vars", ["val"], {key => "pixiv_bookmark_new_illust_last_id"}, 1))->{val});
+						my $id = (defined $1 ? int($1) : $conf->{pixiv_bookmark_new_illust_last_id});
 						$kernel->yield(queue => {from => $who, type => "pixiv_bookmark_new_illust", id => $id});
 					} elsif(/^http:\/\/www\.pixiv\.net\/member_illust.php\?id=(\d+)/ or $what =~ /pixiv member illust (\d+)/) {
 						$kernel->yield(queue => {from => $who, type => "pixiv_member_illust", id => $1});
@@ -232,7 +247,7 @@ POE::Session->create(
 		download_file => sub {
 			my($kernel, $q) = @_[KERNEL, ARG0];
 			
-			my $file_dir = encode_utf8 "$outfolder/$q->{from}" . (defined $q->{file_dir} ? "/$q->{file_dir}" : "");
+			my $file_dir = encode_utf8("$conf->{output_folder}/$q->{from}" . (defined $q->{file_dir} ? "/$q->{file_dir}" : ""));
 			$q->{file_name} = make_file_name($q, $file_dir) if !defined $q->{file_name};
 			make_path($file_dir) if !-d $file_dir;
 			$q->{file_path} = "$file_dir/" . encode_utf8($q->{file_name});
@@ -250,7 +265,7 @@ POE::Session->create(
 		},
 		download_pixivlogin => sub {
 			my($kernel, $q) = @_[KERNEL, ARG0];
-			$kernel->post(http => request => "stream_file", POST('http://www.pixiv.net/index.php', Content => {mode => 'login', pixiv_id => $pixiv_username, pass => $pixiv_password, skip => 1}), $q->{qid});
+			$kernel->post(http => request => "stream_file", POST('http://www.pixiv.net/index.php', Content => {mode => 'login', pixiv_id => $conf->{pixiv_username}, pass => $conf->{pixiv_password}, skip => 1}), $q->{qid});
 			return 1;
 		},
 		handle_pixivlogin_completion => sub {
@@ -315,7 +330,7 @@ POE::Session->create(
 			return if !$kernel->call($session => check_pixiv_login => $q, $buf);
 			return $kernel->yield(requeue => $q) if $buf !~ /<\/html>/;
 			
-			if($pixiv_username) {
+			if($conf->{pixiv_username}) {
 				if($buf =~ /あなたが18/) {
 					$kernel->yield(inform => "Ignoring #$q->{qid}, it's R-18 and the user has disabled R-18.");
 					return;
@@ -411,7 +426,7 @@ POE::Session->create(
 			while($buf =~ /src="http:\/\/img\d+.pixiv.net\/img\/.+?\/(\d+)_s.\w+" alt=".+?"/g) {
 				$heap->{pixiv_bni_last_id} = int($1) if !defined $heap->{pixiv_bni_last_id} or int($1) > $heap->{pixiv_bni_last_id};
 				if(int($1) <= $q->{id}) {
-					$db->set("vars", {val => $heap->{pixiv_bni_last_id}}, {key => "pixiv_bookmark_new_illust_last_id"});
+					$conf->{pixiv_bookmark_new_illust_last_id} = $heap->{pixiv_bni_last_id};
 					return;
 				}
 				#$kernel->yield(requeue => $q, {type => "file", uri => "http:\/\/$1.pixiv.net\/img\/$2\/$3.$4", file_name_ending => "$3 $5.$4", file_dir => "pixiv_bookmark_new_illust_from_$q->{id}"});
@@ -638,11 +653,11 @@ sub fmt_timedelta {
 
 sub make_danbooru_request {
 	my($domain, $func, $options) = @_;
-	if(defined $danbooru->{$domain}->{login}) {
-		$options->{login} = $danbooru->{$domain}->{login};
-		$options->{password_hash} = $danbooru->{$domain}->{password_hash};
+	if($domain eq 'danbooru.donmai.us' and defined $conf->{danbooru_username}) {
+		$options->{login} = $conf->{danbooru_username};
+		$options->{password_hash} = sha1_hex("choujin-steiner--$conf->{danbooru_password}--");
 	}
-	return HTTP::Request->new(GET => sprintf("http://%s/%s.xml?%s", $danbooru->{$domain}->{api_url}, $func, join("&", map { "$_=$options->{$_}" } keys %{$options})));
+	return HTTP::Request->new(GET => sprintf("http://%s/%s.xml?%s", $domain, $func, join("&", map { "$_=$options->{$_}" } keys %{$options})));
 }
 
 sub make_file_name {
@@ -651,7 +666,7 @@ sub make_file_name {
 	my $fne = (defined $q->{file_name_ending} ? $q->{file_name_ending} : $q->{uri});
 	if(defined $q->{when}) {
 		my $when = DateTime->from_epoch(epoch => $q->{when});
-		$when = $when->set_time_zone(TIMEZONE);
+		$when = $when->set_time_zone($conf->{timezone});
 		push @fn, sprintf("[%s]", $when->strftime("%F %T"));
 	}
 	push @fn, "<$q->{nick}>" if defined $q->{nick};
