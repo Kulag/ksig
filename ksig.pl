@@ -13,12 +13,10 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-use strict;
-use utf8;
-use warnings;
-
-use Carp qw(carp croak);
+use 5.010;
+use Carp;
 use Config::YAML;
+use common::sense;
 use Data::Dumper;
 use DateTime;
 use DBI::SpeedySimple;
@@ -94,8 +92,8 @@ POE::Session->create(
 				$irc->plugin_add('Connector', POE::Component::IRC::Plugin::Connector->new(servers => \($url)));
 				$irc->plugin_add('NickReclaim', POE::Component::IRC::Plugin::NickReclaim->new());
 				
-				$kernel->post($irc => register => qw(public msg));
-				$kernel->post($irc => connect => {});
+				$kernel->post($irc, 'register', qw(public msg));
+				$kernel->post($irc, 'connect', {});
 			}
 			
 			$heap->{fetchqueue} = [];
@@ -108,7 +106,7 @@ POE::Session->create(
 			my($kernel, $who, $where, $what) = @_[KERNEL, ARG0, ARG1, ARG2];
 			my $count = 0;
 			my $nick = (split /!/, $who)[0];
-			my $q = {text => ""};
+			my $q = {text => ''};
 			$what = decode_utf8($what);
 			my $queue = sub {
 				if(defined $q->{type}) {
@@ -117,30 +115,36 @@ POE::Session->create(
 					$q->{count} = ($count++);
 					$q->{nick} = $nick;
 					$kernel->yield(queue => $q);
-					$q = {text => ""};
+					$q = {text => ''};
 				}
 			};
 			
 			for(split / /, $what) {
-				if(/http:\/\/(?:www\.)?pixiv\.net\/member_illust\.php\?mode=(?:medium|big)&illust_id=(\d+)/i) {
-					$queue->();
-					$q->{type} = "pixivimage";
-					$q->{id} = $1;
-				} elsif(/http:\/\/(?:www\.)?pixiv\.net\/member_illust\.php\?mode=manga&illust_id=(\d+)/i) {
-					$queue->();
-					$q->{type} = "pixivmanga";
-					$q->{id} = $1;
-				} elsif(/http:\/\/(?:www\.)?(danbooru\.donmai\.us|konachan\.(?:com|net)|moe.imouto.org)\/post\/show\/(\d+)/i) {
-					$queue->();
-					$q->{type} = "danbooruimage";
-					$q->{domain} = $1;
-					$q->{id} = $2;
-				} elsif(/http:\/\/(?:www\.)?.*?(?:png|jpg|jpeg|bmp|gif)$/i) {
-					$queue->();
-					$q->{type} = "file";
-					$q->{uri} = $_;
-				} else {
-					$q->{text} .= $_ . " ";
+				given($_) {
+					when(/http:\/\/(?:www\.)?pixiv\.net\/member_illust\.php\?mode=(?:medium|big)&illust_id=(\d+)/i) {
+						$queue->();
+						$q->{type} = 'pixivimage';
+						$q->{id} = $1;
+					}
+					when(/http:\/\/(?:www\.)?pixiv\.net\/member_illust\.php\?mode=manga&illust_id=(\d+)/i) {
+						$queue->();
+						$q->{type} = 'pixivmanga';
+						$q->{id} = $1;
+					}
+					when(/http:\/\/(?:www\.)?(danbooru\.donmai\.us|konachan\.(?:com|net)|moe.imouto.org)\/post\/show\/(\d+)/i) {
+						$queue->();
+						$q->{type} = 'danbooruimage';
+						$q->{domain} = $1;
+						$q->{id} = $2;
+					}
+					when(/http:\/\/(?:www\.)?.*?(?:png|jpg|jpeg|bmp|gif)$/i) {
+						$queue->();
+						$q->{type} = 'file';
+						$q->{uri} = $_;
+					}
+					default {
+						$q->{text} .= $_ . " ";
+					}
 				}
 			}
 			$queue->();
@@ -161,43 +165,55 @@ POE::Session->create(
 			
 			my $command;
 			($command, $what) = split(/ /, $what, 2);
-			if($command eq 'grab') {
-				for(split / /, $what) {
-					if(/http:\/\/(?:www\.)?pixiv\.net\/member_illust\.php\?mode=(?:medium|big)&illust_id=(\d+)/i) {
-						$kernel->yield(queue => {from => $who, type => "pixivimage", id => $1});
-					} elsif(/http:\/\/(?:www\.)?pixiv\.net\/member_illust\.php\?mode=manga&illust_id=(\d+)/i) {
-						$kernel->yield(queue => {from => $who, type => "pixivmanga", id => $1});
-					} elsif(/http:\/\/(?:www\.)?(danbooru\.donmai\.us|konachan\.(?:com|net)|moe.imouto.org)\/post\/show\/(\d+)/i) {
-						my $domain = $1;
-						$kernel->yield(queue => {from => $who, type => "danbooruimage", domain => $domain, id => $2});
-					} elsif(/http:\/\//i) {
-						$kernel->yield(queue => {from => $who, type => "file", uri => $what});
-					} elsif(/^pixivbni(?:#(\d+))?/i) {
-						my $id = (defined $1 ? int($1) : $conf->{pixiv_bookmark_new_illust_last_id});
-						$kernel->yield(queue => {from => $who, type => "pixiv_bookmark_new_illust", id => $id});
-					} elsif(/^http:\/\/www\.pixiv\.net\/member_illust.php\?id=(\d+)/ or $what =~ /pixiv member illust (\d+)/) {
-						$kernel->yield(queue => {from => $who, type => "pixiv_member_illust", id => $1});
-					} else {
-						$kernel->post($sender => privmsg => $nick => "Don't know how to grab '$what'.");
+			given($command) {
+				when('grab') {
+					for(split / /, $what) {
+						given($_) {
+							when(/http:\/\/(?:www\.)?pixiv\.net\/member_illust\.php\?mode=(?:medium|big)&illust_id=(\d+)/i) {
+								$kernel->yield('queue', {from => $who, type => 'pixivimage', id => $1});
+							}
+							when(/http:\/\/(?:www\.)?pixiv\.net\/member_illust\.php\?mode=manga&illust_id=(\d+)/i) {
+								$kernel->yield('queue', {from => $who, type => 'pixivmanga', id => $1});
+							}
+							when(/http:\/\/(?:www\.)?(danbooru\.donmai\.us|konachan\.(?:com|net)|moe.imouto.org)\/post\/show\/(\d+)/i) {
+								my $domain = $1;
+								$kernel->yield('queue', {from => $who, type => 'danbooruimage', domain => $domain, id => $2});
+							}
+							when(/http:\/\//i) {
+								$kernel->yield('queue', {from => $who, type => 'file', uri => $what});
+							}
+							when(/^pixivbni(?:#(\d+))?/i) {
+								my $id = (defined $1 ? int($1) : $conf->{pixiv_bookmark_new_illust_last_id});
+								$kernel->yield('queue', {from => $who, type => 'pixiv_bookmark_new_illust', id => $id});
+							}
+							when(/^http:\/\/www\.pixiv\.net\/member_illust.php\?id=(\d+)/ or $what =~ /pixiv member illust (\d+)/) {
+								$kernel->yield('queue', {from => $who, type => 'pixiv_member_illust', id => $1});
+							}
+							default {
+								$kernel->post($sender, 'privmsg', $nick, "Don't know how to grab '$what'.");
+							}
+						}
 					}
 				}
-			} elsif($command eq 'hi') {
-				$kernel->post($sender => privmsg => $nick => "Hi there!");
-			} else {
-				$kernel->post($sender => privmsg => $nick => "Unrecognized command '$command'.");
+				when('hi') {
+					$kernel->post($sender => privmsg => $nick => 'Hi there!');
+				}
+				default {
+					$kernel->post($sender => privmsg => $nick => "Unrecognized command '$command'.");
+				}
 			}
 		},
 		queue => sub {
 			my($kernel, $heap, $q) = @_[KERNEL, HEAP, ARG0];
 			
-			$db->insert("fetchqueue", $q);
+			$db->insert('fetchqueue', $q);
 			my $qid = $db->{dbh}->last_insert_id('', '', 'fetchqueue', 'qid');
 			push @{$heap->{fetchqueue}}, $qid;
 			
 			my @infos = ($qid, $q->{type});
 			push @infos, $q->{id} if defined $q->{id};
 			push @infos, $q->{uri} if defined $q->{uri};
-			$kernel->yield(inform => "Queued #" . join(":", @infos));
+			$kernel->yield(inform => 'Queued #' . join(':', @infos));
 			
 			if(!$heap->{downloaderactive}) {
 				$heap->{downloaderactive} = 1;
@@ -222,13 +238,13 @@ POE::Session->create(
 			
 			if(scalar(keys %{$heap->{activequeries}}) < CONCURRENT_REQS) {
 				my $qid = shift(@{$heap->{fetchqueue}});
-				my $q = $db->fetch("fetchqueue", ["*"], {qid => $qid}, 1);
+				my $q = $db->fetch('fetchqueue', ['*'], {qid => $qid}, 1);
 				
 				if($kernel->call($session => "download_$q->{type}" => $q)) {
 					my @infos = ($qid, $q->{type});
 					push @infos, $q->{id} if defined $q->{id};
 					push @infos, $q->{uri} if defined $q->{uri};
-					$kernel->yield(inform => "Get #" . join(":", @infos));
+					$kernel->yield(inform => 'Get #' . join(':', @infos));
 					
 					$q->{starttime} = Time::HiRes::time();
 					$q->{completed_length} = 0 if !defined $q->{completed_length};
@@ -252,35 +268,35 @@ POE::Session->create(
 			
 			
 			my $r = GET $q->{uri};
-			$r->header(Accept_Ranges => "bytes");
+			$r->header(Accept_Ranges => 'bytes');
 			if(-f $q->{file_path}) {
-				$r->header(Range => "bytes=" . (-s $q->{file_path}) . "-");
+				$r->header(Range => 'bytes=' . (-s $q->{file_path}) . "-");
 				$q->{completed_length} = -s $q->{file_path};
 			}
 			$r->header(Referer => 'http://pixiv.net') if($q->{uri} =~ /^http:\/\/img\d+\.pixiv.net/);
-			$kernel->post("http", "request", "stream_file", $r, $q->{qid});
+			$kernel->post('http', 'request', 'stream_file', $r, $q->{qid});
 			return 1;
 		},
 		download_pixivlogin => sub {
 			my($kernel, $q) = @_[KERNEL, ARG0];
-			$kernel->post(http => request => "stream_file", POST('http://www.pixiv.net/index.php', Content => {mode => 'login', pixiv_id => $conf->{pixiv_username}, pass => $conf->{pixiv_password}, skip => 1}), $q->{qid});
+			$kernel->post('http', 'request', 'stream_file', POST('http://www.pixiv.net/index.php', Content => {mode => 'login', pixiv_id => $conf->{pixiv_username}, pass => $conf->{pixiv_password}, skip => 1}), $q->{qid});
 			return 1;
 		},
 		handle_pixivlogin_completion => sub {
 			my($kernel, $heap, $q) = @_[KERNEL, HEAP, ARG0];
 			my $buf = decode_utf8($q->{buf});
-			croak "Pixiv login failed" if($buf =~ /value="login"/);
-			$kernel->yield(inform => "Logged in to pixiv.");
+			croak 'Pixiv login failed' if($buf =~ /value="login"/);
+			$kernel->yield(inform => 'Logged in to pixiv.');
 			$heap->{pixivloggingin} = 0;
 		},
 		download_pixivrelogin => sub {
 			my($kernel, $q) = @_[KERNEL, ARG0];
-			$kernel->post(http => request => "stream_file", POST('http://www.pixiv.net/logout.php'), $q->{qid});
+			$kernel->post('http', 'request', 'stream_file', POST('http://www.pixiv.net/logout.php'), $q->{qid});
 			return 1;
 		},
 		handle_pixivrelogin_completion => sub {
 			my($kernel, $heap, $q) = @_[KERNEL, HEAP, ARG0];
-			$kernel->yield(queue => {type => "pixivlogin"});
+			$kernel->yield(queue => {type => 'pixivlogin'});
 		},
 		check_pixiv_login => sub {
 			my($kernel, $heap, $q, $buf) = @_[KERNEL, HEAP, ARG0, ARG1];
@@ -289,9 +305,9 @@ POE::Session->create(
 			if($buf =~ /value="login"/) {
 				if(!$heap->{pixivloggingin}) {
 					$heap->{pixivloggingin} = 1;
-					$kernel->yield(queue => {type => "pixivlogin"});
+					$kernel->yield('queue', {type => 'pixivlogin'});
 				}
-				$kernel->yield(requeue => $q);
+				$kernel->yield('requeue', $q);
 				return 0;
 			}
 			
@@ -314,7 +330,7 @@ POE::Session->create(
 		download_pixivimage => sub {
 			my($kernel, $heap, $q) = @_[KERNEL, HEAP, ARG0];
 			return 0 if $heap->{pixivloggingin};
-			$kernel->post("http", "request", "stream_file", GET("http://www.pixiv.net/member_illust.php?mode=medium&illust_id=$q->{id}"), $q->{qid});
+			$kernel->post('http', 'request', 'stream_file', GET("http://www.pixiv.net/member_illust.php?mode=medium&illust_id=$q->{id}"), $q->{qid});
 			return 1;
 		},
 		handle_pixivimage_completion => sub {
@@ -357,7 +373,7 @@ POE::Session->create(
 				}
 			} else {
 				if($buf =~ /<title>(.*?) \[pixiv\]<\/title>.*?http:\/\/(img\d+)\.pixiv\.net\/img\/(.*?)\/$q->{id}_s.(\w+)/s) {
-					$kernel->yield(requeue => $q, {type => "file", uri => "http:\/\/$2.pixiv.net\/img\/$3\/$q->{id}.$4", file_name_ending => "pixiv:$q->{id} $1.$4"});
+					$kernel->yield(requeue => $q, {type => 'file', uri => "http:\/\/$2.pixiv.net\/img\/$3\/$q->{id}.$4", file_name_ending => "pixiv:$q->{id} $1.$4"});
 				}
 				# Otherwise, it's probably R-18, but pixiv doesn't return anything to tell us that if we aren't logged in.
 			}
@@ -365,7 +381,7 @@ POE::Session->create(
 		download_pixivmanga => sub {
 			my($kernel, $heap, $q) = @_[KERNEL, HEAP, ARG0];
 			return 0 if $heap->{pixivloggingin};
-			$kernel->post("http", "request", "stream_file", GET("http://www.pixiv.net/member_illust.php?mode=manga&illust_id=$q->{id}" . (defined $q->{uri} ? "&p=$q->{uri}" : "")), $q->{qid});
+			$kernel->post('http', 'request', 'stream_file', GET("http://www.pixiv.net/member_illust.php?mode=manga&illust_id=$q->{id}" . (defined $q->{uri} ? "&p=$q->{uri}" : '')), $q->{qid});
 			return 1;
 		},
 		handle_pixivmanga_completion => sub {
@@ -405,15 +421,15 @@ POE::Session->create(
 			}
 			
 			for my $imageurl (@imageurls) {
-				$kernel->yield(requeue => $q, {type => "file", uri => "http:\/\/$imageurl->[0].pixiv.net\/img\/$imageurl->[1]\/$q->{id}_p$imageurl->[2].$imageurl->[3]", file_name_ending => "pixiv:$q->{id} $title P$imageurl->[2].$imageurl->[3]"});
+				$kernel->yield(requeue => $q, {type => 'file', uri => "http:\/\/$imageurl->[0].pixiv.net\/img\/$imageurl->[1]\/$q->{id}_p$imageurl->[2].$imageurl->[3]", file_name_ending => "pixiv:$q->{id} $title P$imageurl->[2].$imageurl->[3]"});
 			}
 		},
 		download_pixiv_bookmark_new_illust => sub {
 			my($kernel, $heap, $q) = @_[KERNEL, HEAP, ARG0];
 			return 0 if $heap->{pixivloggingin};
-			my $r = GET("http://www.pixiv.net/bookmark_new_illust.php?mode=new&p=" . (defined $q->{uri} ? $q->{uri} : 1));
-			$r->header(Referer => "http://www.pixiv.net/mypage.php") if !defined $q->{uri};
-			$kernel->post("http", "request", "stream_file", $r, $q->{qid});
+			my $r = GET('http://www.pixiv.net/bookmark_new_illust.php?mode=new&p=' . (defined $q->{uri} ? $q->{uri} : 1));
+			$r->header(Referer => 'http://www.pixiv.net/mypage.php') if !defined $q->{uri};
+			$kernel->post('http', 'request', 'stream_file', $r, $q->{qid});
 			return 1;
 		},
 		handle_pixiv_bookmark_new_illust_completion => sub {
@@ -427,15 +443,14 @@ POE::Session->create(
 					$conf->{pixiv_bookmark_new_illust_last_id} = $heap->{pixiv_bni_last_id};
 					return;
 				}
-				#$kernel->yield(requeue => $q, {type => "file", uri => "http:\/\/$1.pixiv.net\/img\/$2\/$3.$4", file_name_ending => "$3 $5.$4", file_dir => "pixiv_bookmark_new_illust_from_$q->{id}"});
-				$kernel->yield(requeue => $q, {type => "pixivimage", id => $1, file_dir => "pixiv_bookmark_new_illust_from_$q->{id}"});
+				$kernel->yield(requeue => $q, {type => 'pixivimage', id => $1, file_dir => "pixiv_bookmark_new_illust_from_$q->{id}"});
 			}
 			$kernel->yield(requeue => $q, {uri => (defined $q->{uri} ? int($q->{uri}) + 1 : 2)});
 		},
 		download_pixiv_member_illust => sub {
 			my($kernel, $heap, $q) = @_[KERNEL, HEAP, ARG0];
 			return 0 if $heap->{pixivloggingin};
-			$kernel->post("http", "request", "stream_file", GET("http://www.pixiv.net/member_illust.php?id=$q->{id}" . (defined $q->{uri} ? "&p=$q->{uri}" : "")), $q->{qid});
+			$kernel->post('http', 'request', 'stream_file', GET("http://www.pixiv.net/member_illust.php?id=$q->{id}" . (defined $q->{uri} ? "&p=$q->{uri}" : '')), $q->{qid});
 			return 1;
 		},
 		handle_pixiv_member_illust_completion => sub {
@@ -450,17 +465,17 @@ POE::Session->create(
 				my $items = int($1);
 				my $pages = ceil($items / 20);
 				if($pages > 1) {
-					$kernel->yield(requeue => $q, {type => "pixiv_member_illust", id => $q->{id}, uri => $_}) for 2..$pages;
+					$kernel->yield(requeue => $q, {type => 'pixiv_member_illust', id => $q->{id}, uri => $_}) for 2..$pages;
 				}
 			}
 			
 			while($buf =~ /member_illust\.php\?mode=medium&illust_id=(\d+)"><img src="http:\/\/img\d+.pixiv.net\/img\/.*?\/\d+_s/g) {
-				$kernel->yield(requeue => $q, {type => "pixivimage", id => $1, file_dir => "pixiv_member_illust_$q->{id}"});
+				$kernel->yield(requeue => $q, {type => 'pixivimage', id => $1, file_dir => "pixiv_member_illust_$q->{id}"});
 			}
 		},
 		download_danbooruimage => sub {
 			my($kernel, $session, $q) = @_[KERNEL, SESSION, ARG0];
-			$kernel->post("http", "request", "stream_file", make_danbooru_request($q->{domain}, "post/index", {tags => "id:$q->{id}"}), $q->{qid});
+			$kernel->post('http', 'request', 'stream_file', make_danbooru_request($q->{domain}, 'post/index', {tags => "id:$q->{id}"}), $q->{qid});
 			return 1;
 		},
 		handle_danbooruimage_completion => sub {
@@ -471,7 +486,7 @@ POE::Session->create(
 			my $fne = $1;
 			$fne =~ s/%20(\d+).*?\.(\w+)$/moe #$1.$2/ if $q->{domain} eq 'moe.imouto.org';
 			
-			$kernel->yield(requeue => $q, {type => "file", desc => $r->{tags}, uri => $r->{file_url}, file_name_ending => $fne});
+			$kernel->yield(requeue => $q, {type => 'file', desc => $r->{tags}, uri => $r->{file_url}, file_name_ending => $fne});
 		},
 		stream_file => sub {
 			my($kernel, $session, $heap, $req, $qid, $res, $chunk) = (@_[KERNEL, SESSION, HEAP], @{$_[ARG0]}, @{$_[ARG1]});
@@ -509,8 +524,8 @@ POE::Session->create(
 							open($q->{outfh}, '>', $q->{file_path}) or croak $!;
 						}
 					} elsif($res->code == 206) {
-						$res->header("Content-Range") =~ /bytes (\d+)-(\d+)\/(\d+)/;
-						croak("restarted at wrong location: " . Dumper($res)) if int($1) != $q->{completed_length};
+						$res->header('Content-Range') =~ /bytes (\d+)-(\d+)\/(\d+)/;
+						croak('restarted at wrong location: ' . Dumper($res)) if int($1) != $q->{completed_length};
 						$q->{total_length} = int($3);
 						if(defined $q->{file_path} and !defined $q->{outfh}) {
 							open($q->{outfh}, '>>', $q->{file_path}) or croak $!;
@@ -559,7 +574,7 @@ POE::Session->create(
 			if($heap->{statsactive}) {
 				push @{$heap->{informqueue}}, $message;
 			} else {
-				print $message . "\n";
+				STDOUT->printflush($message . "\n");
 			}
 		},
 		update_stats => sub {
