@@ -50,7 +50,7 @@ my $conf = Config::YAML->new(
 	danbooru_password => undef,
 	irc_nick => "ksig",
 	irc_servers => {
-		"irc.exampleserver.net" => { "#channel" => "key" },
+		"irc.example.com" => { "#channel" => "key" },
 	},
 	output_folder => File::HomeDir->my_home . "/ksig",
 	admins => [],
