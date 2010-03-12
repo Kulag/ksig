@@ -381,7 +381,7 @@ POE::Session->create(
 		download_pixivmanga => sub {
 			my($kernel, $heap, $q) = @_[KERNEL, HEAP, ARG0];
 			return 0 if $heap->{pixivloggingin};
-			$kernel->post('http', 'request', 'stream_file', GET("http://www.pixiv.net/member_illust.php?mode=manga&illust_id=$q->{id}" . (defined $q->{uri} ? "&p=$q->{uri}" : '')), $q->{qid});
+			$kernel->post('http', 'request', 'stream_file', GET("http://www.pixiv.net/member_illust.php?mode=manga&illust_id=$q->{id}"), $q->{qid});
 			return 1;
 		},
 		handle_pixivmanga_completion => sub {
