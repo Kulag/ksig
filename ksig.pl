@@ -130,11 +130,10 @@ POE::Session->create(
 					$queue->();
 					$q->{type} = "pixivmanga";
 					$q->{id} = $1;
-				} elsif(/http:\/\/(?:www\.)?((?:dan|safe)booru\.donmai\.us|konachan\.(?:com|net)|moe.imouto.org)\/post\/show\/(\d+)/i) {
+				} elsif(/http:\/\/(?:www\.)?(danbooru\.donmai\.us|konachan\.(?:com|net)|moe.imouto.org)\/post\/show\/(\d+)/i) {
 					$queue->();
 					$q->{type} = "danbooruimage";
 					$q->{domain} = $1;
-					$q->{domain} = 'danbooru.donmai.us' if $1 eq 'safebooru.donmai.us';
 					$q->{id} = $2;
 				} elsif(/http:\/\/(?:www\.)?.*?(?:png|jpg|jpeg|bmp|gif)$/i) {
 					$queue->();
@@ -168,9 +167,8 @@ POE::Session->create(
 						$kernel->yield(queue => {from => $who, type => "pixivimage", id => $1});
 					} elsif(/http:\/\/(?:www\.)?pixiv\.net\/member_illust\.php\?mode=manga&illust_id=(\d+)/i) {
 						$kernel->yield(queue => {from => $who, type => "pixivmanga", id => $1});
-					} elsif(/http:\/\/(?:www\.)?((?:dan|safe)booru\.donmai\.us|konachan\.(?:com|net)|moe.imouto.org)\/post\/show\/(\d+)/i) {
+					} elsif(/http:\/\/(?:www\.)?(danbooru\.donmai\.us|konachan\.(?:com|net)|moe.imouto.org)\/post\/show\/(\d+)/i) {
 						my $domain = $1;
-						$domain = 'danbooru.donmai.us' if $domain eq 'safebooru.donmai.us';
 						$kernel->yield(queue => {from => $who, type => "danbooruimage", domain => $domain, id => $2});
 					} elsif(/http:\/\//i) {
 						$kernel->yield(queue => {from => $who, type => "file", uri => $what});
