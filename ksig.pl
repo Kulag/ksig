@@ -121,23 +121,23 @@ POE::Session->create(
 			
 			for(split / /, $what) {
 				given($_) {
-					when(/http:\/\/(?:www\.)?pixiv\.net\/member_illust\.php\?mode=(?:medium|big)&illust_id=(\d+)/i) {
+					when(m!http://(?:www\.)?pixiv\.net/member_illust\.php\?mode=(?:medium|big)&illust_id=(\d+)!i) {
 						$queue->();
 						$q->{type} = 'pixivimage';
 						$q->{id} = $1;
 					}
-					when(/http:\/\/(?:www\.)?pixiv\.net\/member_illust\.php\?mode=manga&illust_id=(\d+)/i) {
+					when(m!http://(?:www\.)?pixiv\.net/member_illust\.php\?mode=manga&illust_id=(\d+)!i) {
 						$queue->();
 						$q->{type} = 'pixivmanga';
 						$q->{id} = $1;
 					}
-					when(/http:\/\/(?:www\.)?(danbooru\.donmai\.us|konachan\.(?:com|net)|moe.imouto.org)\/post\/show\/(\d+)/i) {
+					when(m!http://(?:www\.)?(danbooru\.donmai\.us|konachan\.(?:com|net)|moe.imouto.org)/post/show/(\d+)!i) {
 						$queue->();
 						$q->{type} = 'danbooruimage';
 						$q->{domain} = $1;
 						$q->{id} = $2;
 					}
-					when(/(http:\/\/(?:www\.)?.*?(?:png|jpg|jpeg|bmp|gif))$/i) {
+					when(m!(http://(?:www\.)?.*?(?:png|jpg|jpeg|bmp|gif))$!i) {
 						$queue->();
 						$q->{type} = 'file';
 						$q->{uri} = $1;
