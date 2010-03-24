@@ -137,10 +137,10 @@ POE::Session->create(
 						$q->{domain} = $1;
 						$q->{id} = $2;
 					}
-					when(/http:\/\/(?:www\.)?.*?(?:png|jpg|jpeg|bmp|gif)$/i) {
+					when(/(http:\/\/(?:www\.)?.*?(?:png|jpg|jpeg|bmp|gif))$/i) {
 						$queue->();
 						$q->{type} = 'file';
-						$q->{uri} = $_;
+						$q->{uri} = $1;
 					}
 					default {
 						$q->{text} .= $_ . " ";
@@ -179,8 +179,8 @@ POE::Session->create(
 								my $domain = $1;
 								$kernel->yield('queue', {from => $who, type => 'danbooruimage', domain => $domain, id => $2});
 							}
-							when(/http:\/\//i) {
-								$kernel->yield('queue', {from => $who, type => 'file', uri => $what});
+							when(/(http:\/\/.*)/i) {
+								$kernel->yield('queue', {from => $who, type => 'file', uri => $1});
 							}
 							when(/^pixivbni(?:#(\d+))?/i) {
 								my $id = (defined $1 ? int($1) : $conf->{pixiv_bookmark_new_illust_last_id});
@@ -441,6 +441,7 @@ POE::Session->create(
 				$heap->{pixiv_bni_last_id} = int($1) if !defined $heap->{pixiv_bni_last_id} or int($1) > $heap->{pixiv_bni_last_id};
 				if(int($1) <= $q->{id}) {
 					$conf->{pixiv_bookmark_new_illust_last_id} = $heap->{pixiv_bni_last_id};
+					$conf->write; # TODO: Make the config write on SIGINT like it should.
 					return;
 				}
 				$kernel->yield(requeue => $q, {type => 'pixivimage', id => $1, file_dir => "pixiv_bookmark_new_illust_from_$q->{id}"});
