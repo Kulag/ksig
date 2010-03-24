@@ -137,10 +137,16 @@ POE::Session->create(
 						$q->{domain} = $1;
 						$q->{id} = $2;
 					}
-					when(m!(http://(?:www\.)?.*?(?:png|jpg|jpeg|bmp|gif))$!i) {
+					when(m!(.*?)(http://(?:www\.)?.*?(?:png|jpg|jpeg|bmp|gif))(.*?)$!i) {
 						$queue->();
 						$q->{type} = 'file';
-						$q->{uri} = $1;
+						$q->{uri} = $2;
+						if($1) {
+							$q->{text} .= $1 . " ";
+						}
+						if($3) {
+							$q->{text} .= $3 . " ";
+						}
 					}
 					default {
 						$q->{text} .= $_ . " ";
@@ -179,8 +185,8 @@ POE::Session->create(
 								my $domain = $1;
 								$kernel->yield('queue', {from => $who, type => 'danbooruimage', domain => $domain, id => $2});
 							}
-							when(m!(http://.*)!i) {
-								$kernel->yield('queue', {from => $who, type => 'file', uri => $1});
+							when(m!(.*?)(http://.*)!i) {
+								$kernel->yield('queue', {from => $who, type => 'file', uri => $2, text => $1});
 							}
 							when(m!^pixivbni(?:#(\d+))?!i) {
 								my $id = (defined $1 ? int($1) : $conf->{pixiv_bookmark_new_illust_last_id});
