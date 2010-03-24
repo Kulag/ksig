@@ -169,24 +169,24 @@ POE::Session->create(
 				when('grab') {
 					for(split / /, $what) {
 						given($_) {
-							when(/http:\/\/(?:www\.)?pixiv\.net\/member_illust\.php\?mode=(?:medium|big)&illust_id=(\d+)/i) {
+							when(m!http://(?:www\.)?pixiv\.net/member_illust\.php\?mode=(?:medium|big)&illust_id=(\d+)!i) {
 								$kernel->yield('queue', {from => $who, type => 'pixivimage', id => $1});
 							}
-							when(/http:\/\/(?:www\.)?pixiv\.net\/member_illust\.php\?mode=manga&illust_id=(\d+)/i) {
+							when(m!http://(?:www\.)?pixiv\.net/member_illust\.php\?mode=manga&illust_id=(\d+)!i) {
 								$kernel->yield('queue', {from => $who, type => 'pixivmanga', id => $1});
 							}
-							when(/http:\/\/(?:www\.)?(danbooru\.donmai\.us|konachan\.(?:com|net)|moe.imouto.org)\/post\/show\/(\d+)/i) {
+							when(m!http://(?:www\.)?(danbooru\.donmai\.us|konachan\.(?:com|net)|moe.imouto.org)/post/show/(\d+)!i) {
 								my $domain = $1;
 								$kernel->yield('queue', {from => $who, type => 'danbooruimage', domain => $domain, id => $2});
 							}
-							when(/(http:\/\/.*)/i) {
+							when(m!(http://.*)!i) {
 								$kernel->yield('queue', {from => $who, type => 'file', uri => $1});
 							}
-							when(/^pixivbni(?:#(\d+))?/i) {
+							when(m!^pixivbni(?:#(\d+))?!i) {
 								my $id = (defined $1 ? int($1) : $conf->{pixiv_bookmark_new_illust_last_id});
 								$kernel->yield('queue', {from => $who, type => 'pixiv_bookmark_new_illust', id => $id});
 							}
-							when(/^http:\/\/www\.pixiv\.net\/member_illust.php\?id=(\d+)/ or $what =~ /pixiv member illust (\d+)/) {
+							when(m!^http://www\.pixiv\.net/member_illust.php\?id=(\d+)! or $what =~ /pixiv member illust (\d+)/) {
 								$kernel->yield('queue', {from => $who, type => 'pixiv_member_illust', id => $1});
 							}
 							default {
@@ -273,7 +273,7 @@ POE::Session->create(
 				$r->header(Range => 'bytes=' . (-s $q->{file_path}) . "-");
 				$q->{completed_length} = -s $q->{file_path};
 			}
-			$r->header(Referer => 'http://pixiv.net') if($q->{uri} =~ /^http:\/\/img\d+\.pixiv.net/);
+			$r->header(Referer => 'http://pixiv.net') if($q->{uri} =~ m!^http://img\d+\.pixiv\.net!);
 			$kernel->post('http', 'request', 'stream_file', $r, $q->{qid});
 			return 1;
 		},
@@ -363,8 +363,8 @@ POE::Session->create(
 				}
 				if($buf =~ /member_illust.php\?mode=manga&illust_id=$q->{id}/) {
 					$kernel->yield(requeue => $q, {type => "pixivmanga", id => $q->{id}});
-				} elsif($buf =~ /<title>(.*?)のイラスト \[pixiv\]<\/title>.*?http:\/\/(img\d+)\.pixiv\.net\/img\/(.*?)\/$q->{id}_m.(\w+)/s) {
-					$kernel->yield(requeue => $q, {type => "file", uri => "http:\/\/$2.pixiv.net\/img\/$3\/$q->{id}.$4", file_name_ending => "pixiv:$q->{id} $1.$4"});
+				} elsif($buf =~ m!<title>(.*?)のイラスト \[pixiv\]</title>.*?http://(img\d+)\.pixiv\.net/img/(.*?)/$q->{id}_m.(\w+)!s) {
+					$kernel->yield(requeue => $q, {type => "file", uri => "http://$2.pixiv.net/img/$3/$q->{id}.$4", file_name_ending => "pixiv:$q->{id} $1.$4"});
 				} else {
 					open F, ">pixivimageregex-failed-$q->{id}";
 					F->printflush(encode_utf8($buf));
@@ -372,7 +372,7 @@ POE::Session->create(
 					croak "pixivimage regex failed on $q->{id}";
 				}
 			} else {
-				if($buf =~ /<title>(.*?) \[pixiv\]<\/title>.*?http:\/\/(img\d+)\.pixiv\.net\/img\/(.*?)\/$q->{id}_s.(\w+)/s) {
+				if($buf =~ m!<title>(.*?) \[pixiv\]</title>.*?http://(img\d+)\.pixiv\.net/img/(.*?)/$q->{id}_s.(\w+)!s) {
 					$kernel->yield(requeue => $q, {type => 'file', uri => "http:\/\/$2.pixiv.net\/img\/$3\/$q->{id}.$4", file_name_ending => "pixiv:$q->{id} $1.$4"});
 				}
 				# Otherwise, it's probably R-18, but pixiv doesn't return anything to tell us that if we aren't logged in.
@@ -390,7 +390,7 @@ POE::Session->create(
 			return if !$kernel->call($session => check_pixiv_login => $q, $buf);
 			
 			my $title;
-			if($buf =~ /<title>(.*?)の漫画 \[pixiv\]<\/title>/) {
+			if($buf =~ m!<title>(.*?)の漫画 \[pixiv\]</title>!) {
 				$title = $1;
 			} else {
 				open F, ">pixivmangaregex-title-failed-$q->{id}.html";
@@ -400,7 +400,7 @@ POE::Session->create(
 			}
 			
 			my $pagecount;
-			if($buf =~ /1 \/ (\d+) p/) {
+			if($buf =~ m!1 / (\d+) p!) {
 				$pagecount = int($1);
 			} else {
 				open F, ">pixivmangaregex-pagecount-failed-$q->{id}.html";
@@ -410,7 +410,7 @@ POE::Session->create(
 			}
 			
 			my @imageurls;
-			while($buf =~ /<img src="http:\/\/(img\d+)\.pixiv\.net\/img\/(.*?)\/$q->{id}_p(\d+)\.(\w+)">/g) {
+			while($buf =~ m!<img src="http://(img\d+)\.pixiv\.net/img/(.*?)/$q->{id}_p(\d+)\.(\w+)">!g) {
 				push @imageurls, [$1, $2, $3, $4];
 			}
 			if(scalar(@imageurls) != $pagecount) {
@@ -421,7 +421,7 @@ POE::Session->create(
 			}
 			
 			for my $imageurl (@imageurls) {
-				$kernel->yield(requeue => $q, {type => 'file', uri => "http:\/\/$imageurl->[0].pixiv.net\/img\/$imageurl->[1]\/$q->{id}_p$imageurl->[2].$imageurl->[3]", file_name_ending => "pixiv:$q->{id} $title P$imageurl->[2].$imageurl->[3]"});
+				$kernel->yield(requeue => $q, {type => 'file', uri => "http://$imageurl->[0].pixiv.net/img/$imageurl->[1]/$q->{id}_p$imageurl->[2].$imageurl->[3]", file_name_ending => "pixiv:$q->{id} $title P$imageurl->[2].$imageurl->[3]"});
 			}
 		},
 		download_pixiv_bookmark_new_illust => sub {
@@ -437,7 +437,7 @@ POE::Session->create(
 			my $buf = decode_utf8($q->{buf});
 			return if !$kernel->call($session => check_pixiv_login => $q, $buf);
 			
-			while($buf =~ /src="http:\/\/img\d+.pixiv.net\/img\/.+?\/(\d+)_s.\w+" alt=".+?"/g) {
+			while($buf =~ m!src="http://img\d+.pixiv.net/img/.+?/(\d+)_s.\w+" alt=".+?"!g) {
 				$heap->{pixiv_bni_last_id} = int($1) if !defined $heap->{pixiv_bni_last_id} or int($1) > $heap->{pixiv_bni_last_id};
 				if(int($1) <= $q->{id}) {
 					$conf->{pixiv_bookmark_new_illust_last_id} = $heap->{pixiv_bni_last_id};
@@ -470,7 +470,7 @@ POE::Session->create(
 				}
 			}
 			
-			while($buf =~ /member_illust\.php\?mode=medium&illust_id=(\d+)"><img src="http:\/\/img\d+.pixiv.net\/img\/.*?\/\d+_s/g) {
+			while($buf =~ m!member_illust\.php\?mode=medium&illust_id=(\d+)"><img src="http://img\d+.pixiv.net/img/.*?/\d+_s!g) {
 				$kernel->yield(requeue => $q, {type => 'pixivimage', id => $1, file_dir => "pixiv_member_illust_$q->{id}"});
 			}
 		},
