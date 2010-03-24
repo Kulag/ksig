@@ -38,10 +38,12 @@ use constant SPEED_AVG_WINDOW => 4000; # milliseconds, integer
 use constant STATS_LINE_UPDATE_FREQ => 0.1; # seconds, float
 
 mkdir File::HomeDir->my_home . "/.ksig" if !-d File::HomeDir->my_home . "/.ksig";
+open my $tmp, '>', File::HomeDir->my_home . '/.ksig/config' if !-f File::HomeDir->my_home . '/.ksig/config';
+close $tmp;
 
 my $conf = Config::YAML->new(
-	config => "/usr/share/ksig/config",
-	output => File::HomeDir->my_home . "/.ksig/config",
+	config => File::HomeDir->my_home . '/.ksig/config',
+	output => File::HomeDir->my_home . '/.ksig/config',
 	pixiv_username => undef,
 	pixiv_password => undef,
 	danbooru_username => undef,
@@ -55,7 +57,7 @@ my $conf = Config::YAML->new(
 	timezone => 'UTC',
 	pixiv_bookmark_new_illust_last_id => 0,
 );
-$conf->read(File::HomeDir->my_home . "/.ksig/config") if -f File::HomeDir->my_home . "/.ksig/config";
+$conf->read(File::HomeDir->my_home . '/.ksig/config');
 
 my $db = DBI::SpeedySimple->new("dbi:SQLite:" . File::HomeDir->my_home . "/.ksig/db");
 $db->{dbh}->do("CREATE TABLE IF NOT EXISTS fetchqueue (qid integer primary key autoincrement, `type` text, `id` text, `domain` text, `when` int, `count`, int, `nick` text, `text` text, `desc` text, `uri` text, `from` text, `file_name_ending` text, `file_dir` text, recurse int);");
