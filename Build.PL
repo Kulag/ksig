@@ -35,6 +35,7 @@ my %module_build_args = (
 		'POE::Component::IRC::Plugin::Connector'   => '0',
 		'POE::Component::IRC::Plugin::NickReclaim' => '0',
 		'POSIX'             => '0',
+		'Readonly'          => '0',
 		'Time::HiRes'       => '0',
 		'XML::Simple'       => '0',
 	},

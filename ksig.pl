@@ -30,12 +30,13 @@ use HTTP::Request::Common;
 use List::Util qw(max min);
 use POE qw(Component::Client::HTTP Component::IRC::State Component::IRC::Plugin::AutoJoin Component::IRC::Plugin::Connector Component::IRC::Plugin::NickReclaim);
 use POSIX qw(ceil floor);
+use Readonly;
 use Time::HiRes;
 use XML::Simple;
 
-use constant CONCURRENT_REQS => 5;
-use constant SPEED_AVG_WINDOW => 4000; # milliseconds, integer
-use constant STATS_LINE_UPDATE_FREQ => 0.1; # seconds, float
+Readonly my $CONCURRENT_REQUESTS => 5;
+Readonly my $SPEED_AVG_WINDOW => 4000; # milliseconds, integer
+Readonly my $STATS_LINE_UPDATE_FREQ => 0.1; # seconds, float
 
 mkdir File::HomeDir->my_home . "/.ksig" if !-d File::HomeDir->my_home . "/.ksig";
 open my $tmp, '>', File::HomeDir->my_home . '/.ksig/config' if !-f File::HomeDir->my_home . '/.ksig/config';
@@ -244,7 +245,7 @@ POE::Session->create(
 				return;
 			}
 			
-			if(scalar(keys %{$heap->{activequeries}}) < CONCURRENT_REQS) {
+			if(scalar(keys %{$heap->{activequeries}}) < $CONCURRENT_REQUESTS) {
 				my $qid = shift(@{$heap->{fetchqueue}});
 				my $q = $db->fetch('fetchqueue', ['*'], {qid => $qid}, 1);
 				
@@ -553,7 +554,7 @@ POE::Session->create(
 				$q->{timelens}->{$now} = $q->{completed_length};
 				
 				for(keys %{$q->{timelens}}) {
-					delete $q->{timelens}->{$_} if $now - SPEED_AVG_WINDOW > $_;
+					delete $q->{timelens}->{$_} if $now - $SPEED_AVG_WINDOW > $_;
 				}
 				
 				if(!$heap->{statsactive}) {
@@ -634,7 +635,7 @@ POE::Session->create(
 			$heap->{last_stats_line_len} = length($stats_line);
 			STDOUT->printflush($stats_line);
 			
-			$kernel->delay(update_stats => STATS_LINE_UPDATE_FREQ);
+			$kernel->delay(update_stats => $STATS_LINE_UPDATE_FREQ);
 		},
 	}
 );
@@ -648,7 +649,7 @@ sub calc_speed {
 	
 	if(scalar(@timelens_keys)) {
 		my($min_timelens_key, $max_timelens_key) = (min(@timelens_keys), max(@timelens_keys));
-		$speed = ($q->{timelens}->{$max_timelens_key} - $q->{timelens}->{$min_timelens_key}) / (SPEED_AVG_WINDOW / 1000);
+		$speed = ($q->{timelens}->{$max_timelens_key} - $q->{timelens}->{$min_timelens_key}) / ($SPEED_AVG_WINDOW / 1000);
 	}
 	return $speed;
 }
