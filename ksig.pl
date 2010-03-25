@@ -38,6 +38,8 @@ Readonly my $CONCURRENT_REQUESTS => 5;
 Readonly my $SPEED_AVG_WINDOW => 4000; # milliseconds, integer
 Readonly my $STATS_LINE_UPDATE_FREQ => 0.1; # seconds, float
 
+$|++;
+
 mkdir File::HomeDir->my_home . "/.ksig" if !-d File::HomeDir->my_home . "/.ksig";
 open my $tmp, '>', File::HomeDir->my_home . '/.ksig/config' if !-f File::HomeDir->my_home . '/.ksig/config';
 close $tmp;
@@ -376,7 +378,7 @@ POE::Session->create(
 					$kernel->yield(requeue => $q, {type => "file", uri => "http://$2.pixiv.net/img/$3/$q->{id}.$4", file_name_ending => "pixiv:$q->{id} $1.$4"});
 				} else {
 					open F, ">pixivimageregex-failed-$q->{id}";
-					F->printflush(encode_utf8($buf));
+					print F encode_utf8($buf);
 					close F;
 					croak "pixivimage regex failed on $q->{id}";
 				}
@@ -403,7 +405,7 @@ POE::Session->create(
 				$title = $1;
 			} else {
 				open F, ">pixivmangaregex-title-failed-$q->{id}.html";
-				F->printflush(encode_utf8($buf));
+				print F encode_utf8($buf);
 				close F;
 				carp "pixivmanga regex title failed on $q->{id}";
 			}
@@ -413,7 +415,7 @@ POE::Session->create(
 				$pagecount = int($1);
 			} else {
 				open F, ">pixivmangaregex-pagecount-failed-$q->{id}.html";
-				F->printflush(encode_utf8($buf));
+				print F encode_utf8($buf);
 				close F;
 				carp "pixivmanga regex pagecount failed on $q->{id}";
 			}
@@ -424,7 +426,7 @@ POE::Session->create(
 			}
 			if(scalar(@imageurls) != $pagecount) {
 				open F, ">pixivmangaregex-imageurls-failed-$q->{id}.html";
-				F->printflush(encode_utf8($buf));
+				print F encode_utf8($buf);
 				close F;
 				carp "pixivmanga regex imageurls failed on $q->{id}";
 			}
@@ -584,23 +586,23 @@ POE::Session->create(
 			if($heap->{statsactive}) {
 				push @{$heap->{informqueue}}, $message;
 			} else {
-				STDOUT->printflush($message . "\n");
+				print($message . "\n");
 			}
 		},
 		update_stats => sub {
 			my($kernel, $heap) = @_[KERNEL, HEAP];
 			
 			# First blank the last stats line to prevent trailing garbage.
-			STDOUT->printflush("\r" . (" " x $heap->{last_stats_line_len}) . "\r");
+			print("\r" . (" " x $heap->{last_stats_line_len}) . "\r");
 			
 			# Print out any new lines since the last update.
 			while($_ = shift(@{$heap->{informqueue}})) {
-				STDOUT->printflush($_ . "\n");
+				print($_ . "\n");
 			}
 			
 			# Stop updating if there's nothing going on.
 			if(!scalar(keys %{$heap->{activequeries}})) {
-				STDOUT->printflush("Queue finished.\n");
+				print("Queue finished.\n");
 				$heap->{last_stats_line_len} = 0;
 				$heap->{statsactive} = 0;
 				return;
@@ -633,7 +635,7 @@ POE::Session->create(
 			
 			$stats_line = sprintf("Active: %d/%d %s/s ", scalar(keys %{$heap->{activequeries}}), scalar(@{$heap->{fetchqueue}}) + scalar(keys %{$heap->{activequeries}}), fmt_size($totals{speed})) . $stats_line;
 			$heap->{last_stats_line_len} = length($stats_line);
-			STDOUT->printflush($stats_line);
+			print($stats_line);
 			
 			$kernel->delay(update_stats => $STATS_LINE_UPDATE_FREQ);
 		},
