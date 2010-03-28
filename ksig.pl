@@ -188,15 +188,15 @@ POE::Session->create(
 								my $domain = $1;
 								$kernel->yield('queue', {from => $who, type => 'danbooruimage', domain => $domain, id => $2});
 							}
-							when(m!(.*?)(http://.*)!i) {
-								$kernel->yield('queue', {from => $who, type => 'file', uri => $2, text => $1});
-							}
 							when(m!^pixivbni(?:#(\d+))?!i) {
 								my $id = (defined $1 ? int($1) : $conf->{pixiv_bookmark_new_illust_last_id});
 								$kernel->yield('queue', {from => $who, type => 'pixiv_bookmark_new_illust', id => $id});
 							}
-							when(m!^http://www\.pixiv\.net/member_illust.php\?id=(\d+)! or $what =~ /pixiv member illust (\d+)/) {
+							when(m!^http://www\.pixiv\.net/member_illust.php\?id=(\d+)!) {
 								$kernel->yield('queue', {from => $who, type => 'pixiv_member_illust', id => $1});
+							}
+							when(m!(.*?)(http://.*)!i) {
+								$kernel->yield('queue', {from => $who, type => 'file', uri => $2, text => $1});
 							}
 							default {
 								$kernel->post($sender, 'privmsg', $nick, "Don't know how to grab '$what'.");
