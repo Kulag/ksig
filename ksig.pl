@@ -243,6 +243,7 @@ POE::Session->create(
 					return;
 				}
 			}
+			map { $q->{$_} = defined $q->{$_} ? $q->{$_} : "" } keys %$q;
 			$db->insert('fetchqueue', $q);
 			$qid = $db->{dbh}->last_insert_id('', '', 'fetchqueue', 'qid');
 			push @{$heap->{fetchqueue}}, $qid;
