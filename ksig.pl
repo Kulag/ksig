@@ -555,6 +555,7 @@ POE::Session->create(
 			if(!$res->is_success) {
 				if($res->code == 400 or $res->code == 408 or $res->code == 500) {
 					return if $res->content =~ /request canceled/;
+					$db->remove("fetchqueue", {qid => $qid});
 					$kernel->yield(requeue => $q);
 				} else {
 					$kernel->yield(inform => "#$qid HTTP failure: " . $res->status_line);
