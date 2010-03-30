@@ -99,7 +99,7 @@ POE::Session->create(
 				$irc->plugin_add('Connector', POE::Component::IRC::Plugin::Connector->new(servers => \($url)));
 				$irc->plugin_add('NickReclaim', POE::Component::IRC::Plugin::NickReclaim->new());
 				
-				$kernel->post($irc, 'register', qw(public msg));
+				$kernel->post($irc, 'register', qw(public msg join));
 				$kernel->post($irc, 'connect', {});
 			}
 			
@@ -214,6 +214,14 @@ POE::Session->create(
 				default {
 					$kernel->post($sender => privmsg => $nick => "Unrecognized command '$command'.");
 				}
+			}
+		},
+		irc_join => sub {
+			my($kernel, $sender, $nick, $channel) = @_[KERNEL, SENDER, ARG0, ARG1];
+			my $irc = $sender->get_heap;
+			($nick, my $host) = split '!', $nick;
+			if ($nick eq $conf->{irc_nick}) {
+				$kernel->yield(inform => "Listening on $channel\@". $irc->server_name);
 			}
 		},
 		queue => sub {
