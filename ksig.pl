@@ -38,6 +38,8 @@ Readonly my $CONCURRENT_REQUESTS => 5;
 Readonly my $SPEED_AVG_WINDOW => 4000; # milliseconds, integer
 Readonly my $STATS_LINE_UPDATE_FREQ => 0.1; # seconds, float
 
+binmode(STDOUT, ":utf8");
+
 $|++;
 
 mkdir File::HomeDir->my_home . "/.ksig" if !-d File::HomeDir->my_home . "/.ksig";
