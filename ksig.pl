@@ -137,6 +137,11 @@ POE::Session->create(
 					when('!skip') {
 						return;
 					}
+					when(m!http://img\d+\.pixiv\.net/img/.*?/(\d+)!) {
+						$queue->();
+						$q->{type} = 'pixivimage';
+						$q->{id} = $1;
+					}
 					when(m!http://(?:www\.)?pixiv\.net/member_illust\.php\?mode=(?:medium|big)&illust_id=(\d+)!i) {
 						$queue->();
 						$q->{type} = 'pixivimage';
@@ -191,6 +196,9 @@ POE::Session->create(
 				when('grab') {
 					for(split / /, $what) {
 						given($_) {
+							when(m!http://img\d+\.pixiv\.net/img/.*?/(\d+)!) {
+								$kernel->yield('queue', {from => $who, type => 'pixivimage', id => $1});
+							}
 							when(m!http://(?:www\.)?pixiv\.net/member_illust\.php\?mode=(?:medium|big)&illust_id=(\d+)!i) {
 								$kernel->yield('queue', {from => $who, type => 'pixivimage', id => $1});
 							}
