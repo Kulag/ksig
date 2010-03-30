@@ -109,6 +109,15 @@ POE::Session->create(
 			$heap->{downloaderactive} = 0;
 			$heap->{statsactive} = 0;
 			$heap->{last_stats_line_len} = 0;
+
+			my $qids = $db->{dbh}->selectcol_arrayref('SELECT qid FROM fetchqueue');
+			
+			push @{$heap->{fetchqueue}}, $_ foreach (@$qids);
+			
+			if (@{$heap->{fetchqueue}}) {
+				$heap->{downloaderactive} = 1;
+				$kernel->yield("proc_fetchqueue");
+			}
 		},
 		irc_public => sub {
 			my($kernel, $who, $where, $what) = @_[KERNEL, ARG0, ARG1, ARG2];
