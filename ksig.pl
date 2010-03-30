@@ -131,7 +131,6 @@ POE::Session->create(
 					$q = {text => ''};
 				}
 			};
-			
 			for(split / /, $what) {
 				given($_) {
 					when('!skip') {
@@ -170,7 +169,7 @@ POE::Session->create(
 						}
 					}
 					default {
-						$q->{text} .= $_ . " ";
+						$q->{text} .= "$_ ";
 					}
 				}
 			}
@@ -243,7 +242,7 @@ POE::Session->create(
 		},
 		queue => sub {
 			my($kernel, $heap, $q) = @_[KERNEL, HEAP, ARG0];
-			
+
 			my $qid;
 			if( $q->{uri} && defined ($qid = $db->fetch('fetchqueue', [ 'qid' ], { uri => $q->{uri} }, 1)) ) {
 				if( !($q->{type} eq "pixiv_bookmark_new_illust" || $q->{type} eq "pixivimage") ) {
@@ -419,7 +418,11 @@ POE::Session->create(
 				}
 			} else {
 				if($buf =~ m!<title>(.*?) \[pixiv\]</title>.*?http://(img\d+)\.pixiv\.net/img/(.*?)/$q->{id}_s.(\w+)!s) {
-					$kernel->yield(requeue => $q, {type => 'file', uri => "http:\/\/$2.pixiv.net\/img\/$3\/$q->{id}.$4", file_name_ending => "pixiv:$q->{id} $1.$4"});
+					$kernel->yield(requeue => $q, {
+						type => 'file',
+						uri => "http:\/\/$2.pixiv.net\/img\/$3\/$q->{id}.$4",
+						file_name_ending => "pixiv:$q->{id} $1.$4",
+					});
 				}
 				# Otherwise, it's probably R-18, but pixiv doesn't return anything to tell us that if we aren't logged in.
 			}
@@ -434,7 +437,7 @@ POE::Session->create(
 			my($kernel, $heap, $session, $q) = @_[KERNEL, HEAP, SESSION, ARG0];
 			my $buf = decode_utf8($q->{buf});
 			return if !$kernel->call($session => check_pixiv_login => $q, $buf);
-			
+
 			my $title;
 			if($buf =~ m!<title>(.*?)の漫画 \[pixiv\]</title>!) {
 				$title = $1;
@@ -467,7 +470,11 @@ POE::Session->create(
 			}
 			
 			for my $imageurl (@imageurls) {
-				$kernel->yield(requeue => $q, {type => 'file', uri => "http://$imageurl->[0].pixiv.net/img/$imageurl->[1]/$q->{id}_p$imageurl->[2].$imageurl->[3]", file_name_ending => "pixiv:$q->{id} $title P$imageurl->[2].$imageurl->[3]"});
+				$kernel->yield(requeue => $q, {
+					type => 'file',
+					uri => "http://$imageurl->[0].pixiv.net/img/$imageurl->[1]/$q->{id}_p$imageurl->[2].$imageurl->[3]",
+					file_name_ending => "pixiv:$q->{id} $title P$imageurl->[2].$imageurl->[3]",
+				});
 			}
 		},
 		download_pixiv_bookmark_new_illust => sub {
@@ -608,7 +615,7 @@ POE::Session->create(
 			close $q->{outfh} if $q->{outfh};
 			delete $heap->{activequeries}->{$q->{qid}};
 			$db->remove("fetchqueue", {qid => $q->{qid}});
-			
+
 			if($success) {
 				my $transfer_timedelta = Time::HiRes::time() - $q->{starttime};
 				$kernel->yield(inform => sprintf("Finished #%d. %s transferred in %s (avg %s/s).", $q->{qid}, fmt_size($q->{completed_length} - $q->{startpos}), fmt_timedelta($transfer_timedelta), fmt_size($q->{completed_length} / $transfer_timedelta)));
@@ -722,6 +729,7 @@ sub make_danbooru_request {
 
 sub make_file_name {
 	my($q, $file_dir) = @_;
+
 	my @fn;
 	my $fne = (defined $q->{file_name_ending} ? $q->{file_name_ending} : $q->{uri});
 	if(defined $q->{when}) {
