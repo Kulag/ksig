@@ -559,6 +559,7 @@ POE::Session->create(
 					$kernel->yield(requeue => $q);
 				} else {
 					$kernel->yield(inform => "#$qid HTTP failure: " . $res->status_line);
+					$db->remove("fetchqueue", {qid => $qid}) if( $res->code == 416 || $res->code == 404 );
 				}
 				delete $heap->{activequeries}->{$qid};
 				return;
