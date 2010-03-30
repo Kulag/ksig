@@ -620,7 +620,11 @@ POE::Session->create(
 
 			if($success) {
 				my $transfer_timedelta = Time::HiRes::time() - $q->{starttime};
-				$kernel->yield(inform => sprintf("Finished #%d. %s transferred in %s (avg %s/s).", $q->{qid}, fmt_size($q->{completed_length} - $q->{startpos}), fmt_timedelta($transfer_timedelta), fmt_size($q->{completed_length} / $transfer_timedelta)));
+				$kernel->yield(inform => sprintf("Finished #%d. %s transferred in %s (avg %s/s).",
+				                                 $q->{qid},
+				                                 fmt_size($q->{completed_length} - $q->{startpos}),
+				                                 fmt_timedelta($transfer_timedelta),
+				                                 fmt_size($q->{completed_length} / $transfer_timedelta)));
 				$kernel->yield("handle_$q->{type}_completion" => $q);
 			}
 		},
