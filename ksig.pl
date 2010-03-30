@@ -236,8 +236,15 @@ POE::Session->create(
 		queue => sub {
 			my($kernel, $heap, $q) = @_[KERNEL, HEAP, ARG0];
 			
+			my $qid;
+			if( $q->{uri} && defined ($qid = $db->fetch('fetchqueue', [ 'qid' ], { uri => $q->{uri} }, 1)) ) {
+				if( !($q->{type} eq "pixiv_bookmark_new_illust" || $q->{type} eq "pixivimage") ) {
+					$kernel->yield(inform => "URI '$q->{uri}' already queued at #$qid->{qid}");
+					return;
+				}
+			}
 			$db->insert('fetchqueue', $q);
-			my $qid = $db->{dbh}->last_insert_id('', '', 'fetchqueue', 'qid');
+			$qid = $db->{dbh}->last_insert_id('', '', 'fetchqueue', 'qid');
 			push @{$heap->{fetchqueue}}, $qid;
 			
 			my @infos = ($qid, $q->{type});
