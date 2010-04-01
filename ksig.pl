@@ -61,6 +61,7 @@ my $conf = Config::YAML->new(
 	admins => [],
 	timezone => 'UTC',
 	pixiv_bookmark_new_illust_last_id => 0,
+	irc_ignore_skipped_urls => 1,
 );
 $conf->read(File::HomeDir->my_home . '/.ksig/config');
 
@@ -128,6 +129,9 @@ POE::Session->create(
 			
 			for(split / /, $what) {
 				given($_) {
+					when('!skip') {
+						return;
+					}
 					when(m!http://(?:www\.)?pixiv\.net/member_illust\.php\?mode=(?:medium|big)&illust_id=(\d+)!i) {
 						$queue->();
 						$q->{type} = 'pixivimage';
