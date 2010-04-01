@@ -643,8 +643,10 @@ POE::Session->create(
 			print("\r" . (" " x $heap->{last_stats_line_len}) . "\r");
 			
 			# Print out any new lines since the last update.
-			say join("\n", @{$heap->{informqueue}});
-			$heap->{informqueue} = [];
+			if(@{$heap->{informqueue}}) {
+				say join("\n", @{$heap->{informqueue}});
+				$heap->{informqueue} = [];
+			}
 			
 			# Stop updating if there's nothing going on.
 			if(!scalar(keys %{$heap->{activequeries}})) {
