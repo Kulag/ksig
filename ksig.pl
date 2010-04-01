@@ -104,17 +104,13 @@ POE::Session->create(
 				$kernel->post($irc, 'connect', {});
 			}
 			
-			$heap->{fetchqueue} = [];
-			$heap->{informqueue} = [];
 			$heap->{downloaderactive} = 0;
-			$heap->{statsactive} = 0;
+			$heap->{informqueue} = [];
+			$heap->{fetchqueue} = $db->{dbh}->selectcol_arrayref('SELECT qid FROM fetchqueue');
 			$heap->{last_stats_line_len} = 0;
-
-			my $qids = $db->{dbh}->selectcol_arrayref('SELECT qid FROM fetchqueue');
+			$heap->{statsactive} = 0;
 			
-			push @{$heap->{fetchqueue}}, $_ foreach (@$qids);
-			
-			if (@{$heap->{fetchqueue}}) {
+			if(@{$heap->{fetchqueue}}) {
 				$heap->{downloaderactive} = 1;
 				$kernel->yield("proc_fetchqueue");
 			}
