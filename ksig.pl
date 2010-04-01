@@ -281,7 +281,7 @@ POE::Session->create(
 				return;
 			}
 			
-			if(scalar(keys %{$heap->{activequeries}}) < $CONCURRENT_REQUESTS) {
+			while(scalar(keys %{$heap->{activequeries}}) < $CONCURRENT_REQUESTS) {
 				my $qid = shift(@{$heap->{fetchqueue}});
 				my $q = $db->fetch('fetchqueue', ['*'], {qid => $qid}, 1);
 				
@@ -300,8 +300,7 @@ POE::Session->create(
 					$heap->{downloaderactive} = 1;
 				}
 			}
-		
-			$kernel->delay(proc_fetchqueue => 0.5);
+			$kernel->delay('proc_fetchqueue', 0.1);
 		},
 		download_file => sub {
 			my($kernel, $q) = @_[KERNEL, ARG0];
