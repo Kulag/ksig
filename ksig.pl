@@ -179,7 +179,7 @@ event irc_public => sub {
 				$q->{domain} = $1;
 				$q->{id} = $2;
 			}
-			when(m!(.*?)(https?://(?:www\.)?.*?(?:png|jpe?g|bmp|gif))(.*?)$!i) {
+			when(m!^(.*?)(https?://(?:www\.)?.*?(?:png|jpe?g|bmp|gif))(.*?)$!i) {
 				$queue->();
 				$q->{type} = 'file';
 				$q->{uri} = $2;
