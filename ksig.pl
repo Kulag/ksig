@@ -295,12 +295,11 @@ method requeue($q, ?$newq) {
 event proc_fetchqueue => sub {
 	my $self = shift;
 	
-	if(!scalar @{$self->{fetchqueue}}) {
-		$self->{downloaderactive} = 0;
-		return;
-	}
-	
 	while(scalar(keys %{$self->{activequeries}}) < $CONCURRENT_REQUESTS) {
+		if(!scalar @{$self->{fetchqueue}}) {
+			$self->{downloaderactive} = 0;
+			return;
+		}
 		my $qid = shift(@{$self->{fetchqueue}});
 		my $q = $db->fetch('fetchqueue', ['*'], {qid => $qid}, 1);
 		
