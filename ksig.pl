@@ -156,7 +156,7 @@ event irc_public => sub {
 	for(split / /, $what) {
 		given($_) {
 			when('!skip') {
-				return;
+				return if $conf->{irc_ignore_skipped_urls};
 			}
 			when(m!http://img\d+\.pixiv\.net/img/.*?/(\d+)!) {
 				$queue->();
