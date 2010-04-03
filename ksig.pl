@@ -203,8 +203,8 @@ event irc_msg => sub {
 	my($self, $sender, $who, $where, $what) = @_[0, SENDER, ARG0, ARG1, ARG2];
 	my $allowed = 0;
 	for(@{$conf->{admins}}) {
-		if($who =~ $_->{regex}) {
-			$allowed = $_;
+		if($who =~ /$_/i) {
+			$allowed = 1;
 			last;
 		}
 	}
