@@ -29,6 +29,8 @@ use HTTP::Cookies;
 use HTTP::Request;
 use HTTP::Request::Common;
 use List::Util qw(max min);
+use Log::Any::Adapter;
+use Log::Dispatch;
 use MooseX::POE;
 use Perl6::Subs;
 use POE qw(Component::Client::HTTP Component::IRC::State Component::IRC::Plugin::AutoJoin Component::IRC::Plugin::Connector Component::IRC::Plugin::NickReclaim);
@@ -58,6 +60,7 @@ my $conf = Config::YAML->new(
 	pixiv_password => undef,
 	danbooru_username => undef,
 	danbooru_password => undef,
+	irc_ignore_skipped_urls => 1,
 	irc_nick => "ksig",
 	irc_servers => {
 		"irc.example.com" => { "#channel" => "key" },
@@ -66,13 +69,13 @@ my $conf = Config::YAML->new(
 	admins => [],
 	timezone => 'UTC',
 	pixiv_bookmark_new_illust_last_id => 0,
-	irc_ignore_skipped_urls => 1,
+	screen_output_level => 'info',
 );
 $conf->read(File::HomeDir->my_home . '/.ksig/config');
 
 my $db = DBI::SpeedySimple->new("dbi:SQLite:" . File::HomeDir->my_home . "/.ksig/db");
 $db->{dbh}->do("CREATE TABLE IF NOT EXISTS fetchqueue (qid integer primary key autoincrement, `type` text, `id` text, `domain` text, `when` int, `count`, int, `nick` text, `text` text, `desc` text, `uri` text, `from` text, `file_name_ending` text, `file_dir` text, recurse int);");
-
+my $log;
 
 POE::Component::Client::HTTP->spawn(
 	Alias => 'http',
@@ -94,6 +97,28 @@ POE::Component::Client::HTTP->spawn(
 sub START {
 	my $self = shift;
 	
+	$self->{activequeries} = {};
+	$self->{downloaderactive} = 0;
+	$self->{informqueue} = [];
+	$self->{fetchqueue} = $db->{dbh}->selectcol_arrayref('SELECT qid FROM fetchqueue');
+	$self->{last_stats_line_len} = 0;
+	$self->{statsactive} = 0;
+	
+	$log = Log::Dispatch->new(
+		outputs => [['File', min_level => 'debug', filename => File::HomeDir->my_home . '/.ksig/log', newline => 1]],
+		callbacks => sub {
+			my %p = @_;
+			if($self->{statsactive}) {
+				push @{$self->{informqueue}}, $p{message};
+			}
+			else {
+				say $p{message};
+			}
+			return $p{message};
+		},
+	);
+	Log::Any::Adapter->set('Dispatch', dispatcher => $log);
+	
 	for my $url (keys %{$conf->{irc_servers}}) {
 		my $irc = POE::Component::IRC::State->spawn(
 			Nick => $conf->{irc_nick},
@@ -108,19 +133,13 @@ sub START {
 		$poe_kernel->post($irc, 'connect', {});
 	}
 	
-	$self->{activequeries} = {};
-	$self->{downloaderactive} = 0;
-	$self->{informqueue} = [];
-	$self->{fetchqueue} = $db->{dbh}->selectcol_arrayref('SELECT qid FROM fetchqueue');
-	$self->{last_stats_line_len} = 0;
-	$self->{statsactive} = 0;
-	
 	if(@{$self->{fetchqueue}}) {
 		$self->{downloaderactive} = 1;
 		$self->yield("proc_fetchqueue");
 	}
 	return;
 }
+
 sub STOP {
 	$conf->write;
 	return;
@@ -132,7 +151,7 @@ event irc_join => sub {
 	my $irc = $sender->get_heap;
 	($nick, my $vhost) = split '!', $nick;
 	if($nick eq $conf->{irc_nick}) {
-		$self->inform("Listening on $channel\@". $irc->server_name);
+		$log->info("Listening on $channel\@". $irc->server_name);
 	}
 	return;
 };
@@ -262,7 +281,7 @@ method queue($q) {
 	my $qid;
 	if($q->{uri} && defined($qid = $db->fetch('fetchqueue', [ 'qid' ], { uri => $q->{uri} }, 1))) {
 		if(!($q->{type} eq 'pixiv_bookmark_new_illust' || $q->{type} eq 'pixivimage')) {
-			$self->inform("URI '$q->{uri}' already queued at #$qid->{qid}");
+			$log->info("URI '$q->{uri}' already queued at #$qid->{qid}");
 			return;
 		}
 	}
@@ -274,7 +293,7 @@ method queue($q) {
 	my @infos = ($qid, $q->{type});
 	push @infos, $q->{id} if defined $q->{id};
 	push @infos, $q->{uri} if defined $q->{uri};
-	$self->inform('Queued #' . join(':', @infos));
+	$log->info('Queued #' . join(':', @infos));
 	
 	if(!$self->{downloaderactive}) {
 		$self->{downloaderactive} = 1;
@@ -308,7 +327,7 @@ event proc_fetchqueue => sub {
 			my @infos = ($qid, $q->{type});
 			push @infos, $q->{id} if defined $q->{id};
 			push @infos, $q->{uri} if defined $q->{uri};
-			$self->inform('Get #' . join(':', @infos));
+			$log->info('Get #' . join(':', @infos));
 			
 			$q->{starttime} = Time::HiRes::time();
 			$q->{completed_length} = 0 if !defined $q->{completed_length};
@@ -327,7 +346,7 @@ event stream_file => sub {
 	my($self, $req, $qid, $res, $chunk) = ($_[0], @{$_[ARG0]}, @{$_[ARG1]});
 	my $q = $self->{activequeries}->{$qid};
 	if(!defined $q) {
-		$self->inform("#$qid no longer active.");
+		$log->info("#$qid no longer active.");
 		return;
 	}
 	if(!$res->is_success) {
@@ -337,7 +356,7 @@ event stream_file => sub {
 			$self->clear_download($q);
 		}
 		elsif($res->code == 416 || $res->code == 404) {
-			$self->inform("#$qid HTTP failure: " . $res->status_line);
+			$log->info("#$qid HTTP failure: " . $res->status_line);
 			$self->clear_download($q);
 		}
 		return;
@@ -349,7 +368,7 @@ event stream_file => sub {
 				$q->{total_length} = int($res->header('Content-Length'));
 				if($q->{completed_length} == $q->{total_length}) {
 					$poe_kernel->call('http', 'cancel', $req);
-					$self->inform("$qid is already done.");
+					$log->info("$qid is already done.");
 					$self->download_finished($q);
 					return;
 				}
@@ -448,7 +467,7 @@ event update_stats => sub {
 method download_finished($q) {
 	$self->clear_download($q);
 	my $transfer_timedelta = Time::HiRes::time() - $q->{starttime};
-	$self->inform(sprintf("Finished #%d. %s transferred in %s (avg %s/s).",
+	$log->info(sprintf("Finished #%d. %s transferred in %s (avg %s/s).",
 		$q->{qid},
 		fmt_size($q->{completed_length} - $q->{startpos}),
 		fmt_timedelta($transfer_timedelta),
@@ -462,15 +481,6 @@ method clear_download($q) {
 	close $q->{outfh} if $q->{outfh};
 	delete $self->{activequeries}->{$q->{qid}};
 	$db->remove('fetchqueue', {qid => $q->{qid}});
-	return;
-}
-
-method inform($message) {
-	if($self->{statsactive}) {
-		push @{$self->{informqueue}}, $message;
-	} else {
-		say $message;
-	}
 	return;
 }
 
@@ -502,7 +512,7 @@ method download_pixivlogin($q) {
 method handle_pixivlogin_completion($q) {
 	my $buf = decode_utf8($q->{buf});
 	croak 'Pixiv login failed' if($buf =~ /value="login"/);
-	$self->inform('Logged in to pixiv.');
+	$log->info('Logged in to pixiv.');
 	$self->{pixivloggingin} = 0;
 }
 
@@ -531,11 +541,11 @@ method handle_pixivimage_completion($q) {
 		return if !$self->check_pixiv_login($q, $buf);
 		given($buf) {
 			when(/あなたが18/) {
-				$self->inform("Ignoring #$q->{qid}, it's R-18 and the user has disabled R-18.");
+				$log->info("Ignoring #$q->{qid}, it's R-18 and the user has disabled R-18.");
 				return;
 			}
 			when(/該当イラストは削除されたか、存在しないイラストIDです。/) { # Either the corresponding illustration has been deleted, or the illustration ID does not exist.
-				$self->inform("#$q->{qid} was deleted before we got to it.");
+				$log->info("#$q->{qid} was deleted before we got to it.");
 				return;
 			}
 			when(/member_illust.php\?mode=manga&illust_id=$q->{id}/) {
