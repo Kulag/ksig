@@ -313,12 +313,12 @@ method requeue($q, ?$newq) {
 
 event proc_fetchqueue => sub {
 	my $self = shift;
+	if(!scalar @{$self->{fetchqueue}}) {
+		$self->{downloaderactive} = 0;
+		return;
+	}
 	
-	while(scalar(keys %{$self->{activequeries}}) < $CONCURRENT_REQUESTS) {
-		if(!scalar @{$self->{fetchqueue}}) {
-			$self->{downloaderactive} = 0;
-			return;
-		}
+	if(scalar(keys %{$self->{activequeries}}) < $CONCURRENT_REQUESTS) {
 		my $qid = shift(@{$self->{fetchqueue}});
 		my $q = $db->fetch('fetchqueue', ['*'], {qid => $qid}, 1);
 		
@@ -338,7 +338,13 @@ event proc_fetchqueue => sub {
 			push @{$self->{fetchqueue}}, $qid;
 		}
 	}
-	$poe_kernel->delay('proc_fetchqueue', 0.1);
+	
+	if(scalar(keys %{$self->{activequeries}}) < $CONCURRENT_REQUESTS) {
+		$self->yield('proc_fetchqueue');
+	}
+	else {
+		$poe_kernel->delay('proc_fetchqueue', 0.1);
+	}
 	return;
 };
 
