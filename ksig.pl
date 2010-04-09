@@ -644,6 +644,7 @@ method handle_pixiv_bookmark_new_illust_completion($q) {
 		$self->{pixiv_bni_last_id} = int($1) if !defined $self->{pixiv_bni_last_id} || int($1) > $self->{pixiv_bni_last_id};
 		if(int($1) <= $q->{id}) {
 			$conf->{pixiv_bookmark_new_illust_last_id} = $self->{pixiv_bni_last_id};
+			$conf->write;
 			return;
 		}
 		$self->requeue($q, {type => 'pixivimage', id => $1, file_dir => "pixiv_bookmark_new_illust_from_$q->{id}"});
