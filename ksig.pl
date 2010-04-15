@@ -279,12 +279,6 @@ event irc_msg => sub {
 
 method queue($q) {
 	my $qid;
-	if($q->{uri} && defined($qid = $db->fetch('fetchqueue', [ 'qid' ], { uri => $q->{uri} }, 1))) {
-		if(!($q->{type} eq 'pixiv_bookmark_new_illust' || $q->{type} eq 'pixivimage')) {
-			$log->info("URI '$q->{uri}' already queued at #$qid->{qid}");
-			return;
-		}
-	}
 	map { $q->{$_} = defined $q->{$_} ? $q->{$_} : '' } keys %$q;
 	$db->insert('fetchqueue', $q);
 	$qid = $db->{dbh}->last_insert_id('', '', 'fetchqueue', 'qid');
