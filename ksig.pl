@@ -267,6 +267,20 @@ event irc_msg => sub {
 				}
 			}
 		}
+		when('cancel') {
+			if($db->exists('fetchqueue', {qid => $what})) {
+				if(my $q = $self->{activequeries}->{$what}) {
+					$self->clear_download($q);
+				}
+				else {
+					$db->remove('fetchqueue', {qid => $q->{qid}});
+				}
+				$poe_kernel->post($sender => privmsg => $nick => "#$what canceled.");
+			}
+			else {
+				$poe_kernel->post($sender => privmsg => $nick => "Invalid fetchqueue ID: $what");
+			}
+		}
 		when('hi') {
 			$poe_kernel->post($sender => privmsg => $nick => 'Hi there!');
 		}
