@@ -614,7 +614,7 @@ method handle_pixivmanga_completion($q) {
 	}
 	
 	for my $imageurl (@imageurls) {
-		$poe_kernel->yield(requeue => $q, {
+		$self->requeue($q, {
 			type => 'file',
 			uri => "http://$imageurl->[0].pixiv.net/img/$imageurl->[1]/$q->{id}_p$imageurl->[2].$imageurl->[3]",
 			file_name_ending => "pixiv:$q->{id} $title P$imageurl->[2].$imageurl->[3]",
