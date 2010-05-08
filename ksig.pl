@@ -66,6 +66,7 @@ my $conf = Config::YAML->new(
 	irc_servers => {
 		"irc.example.com" => { "#channel" => "key" },
 	},
+	irc_quitmsg => 'ksig is shutting down.',
 	output_folder => File::HomeDir->my_home . "/ksig",
 	admins => [],
 	timezone => 'UTC',
@@ -77,8 +78,9 @@ $conf->read(File::HomeDir->my_home . '/.ksig/config');
 my $db = DBI::SpeedySimple->new("dbi:SQLite:" . File::HomeDir->my_home . "/.ksig/db");
 $db->{dbh}->do("CREATE TABLE IF NOT EXISTS fetchqueue (qid integer primary key autoincrement, `type` text, `id` text, `domain` text, `when` int, `count`, int, `nick` text, `text` text, `desc` text, `uri` text, `from` text, `file_name_ending` text, `file_dir` text, recurse int);");
 my $log;
+my %irc_session_ids;
 
-POE::Component::Client::HTTP->spawn(
+my $http_session_id = POE::Component::Client::HTTP->spawn(
 	Alias => 'http',
 	Timeout => 45,
 	Streaming => 4096,
@@ -132,6 +134,7 @@ sub START {
 		
 		$poe_kernel->post($irc, 'register', qw(public msg join));
 		$poe_kernel->post($irc, 'connect', {});
+		$irc_session_ids{$irc->session_id} = 1;
 	}
 	
 	if(@{$self->{fetchqueue}}) {
@@ -142,9 +145,27 @@ sub START {
 }
 
 sub STOP {
-	$conf->write;
+	my $self = shift;
+	$self->yield('shutdown');
 	return;
 }
+
+event shutdown => sub {
+	my $self = shift;
+	if(!$self->{_shutdown}) {
+		$log->info("ksig is shutting down.");
+		$self->{_shutdown} = 1;
+		if($http_session_id) {
+			$poe_kernel->post($http_session_id, 'shutdown');
+			$http_session_id = 0;
+		}
+		for(keys %irc_session_ids) {
+			$poe_kernel->post($_, 'shutdown', $conf->{irc_quitmsg});
+		}
+		$conf->write;
+	}
+	return;
+};
 
 # IRC events.
 event irc_join => sub {
@@ -278,6 +299,9 @@ event irc_msg => sub {
 				$poe_kernel->post($sender => privmsg => $nick => "Invalid fetchqueue ID: $what");
 			}
 		}
+		when('shutdown') {
+			$self->yield('shutdown');
+		}
 		when('hi') {
 			$poe_kernel->post($sender => privmsg => $nick => 'Hi there!');
 		}
@@ -300,7 +324,7 @@ method queue($q) {
 	push @infos, $q->{uri} if defined $q->{uri};
 	$log->info('Queued #' . join(':', @infos));
 	
-	if(!$self->{downloaderactive}) {
+	if(!$self->{_shutdown} && !$self->{downloaderactive}) {
 		$self->{downloaderactive} = 1;
 		$self->yield('proc_fetchqueue');
 	}
@@ -318,7 +342,7 @@ method requeue($q, ?$newq) {
 
 event proc_fetchqueue => sub {
 	my $self = shift;
-	if(!scalar @{$self->{fetchqueue}}) {
+	if(!scalar @{$self->{fetchqueue}} || $self->{_shutdown}) {
 		$self->{downloaderactive} = 0;
 		return;
 	}
@@ -361,15 +385,22 @@ event stream_file => sub {
 		return;
 	}
 	if(!$res->is_success) {
-		if($res->code == 400 or $res->code == 408 or $res->code == 500) {
+		if($res->code == 408) {
 			return if $res->content =~ /request canceled/;
+			if($res->content =~ /component shut down/) {
+				$log->info("Closing #$qid in preparation for component shutdown.");
+				$self->clear_download($q);
+				return;
+			}
 			$self->requeue($q);
-			$self->clear_download($q);
+		}
+		elsif($res->code == 400 || $res->code == 500) {
+			$self->requeue($q);
 		}
 		elsif($res->code == 416 || $res->code == 404) {
 			$log->info("#$qid HTTP failure: " . $res->status_line);
-			$self->clear_download($q);
 		}
+		$self->clear_download($q);
 		return;
 	}
 	if(defined $chunk) {
@@ -380,7 +411,7 @@ event stream_file => sub {
 				if($q->{completed_length} == $q->{total_length}) {
 					$poe_kernel->call('http', 'cancel', $req);
 					$log->info("$qid is already done.");
-					$self->download_finished($q);
+					$self->clear_download($q);
 					return;
 				}
 				if(defined $q->{file_path} && !defined $q->{outfh}) {
