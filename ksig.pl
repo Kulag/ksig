@@ -34,6 +34,7 @@ use Log::Dispatch;
 use MooseX::POE;
 use Perl6::Subs;
 use POE qw(Component::Client::HTTP Component::IRC::State Component::IRC::Plugin::AutoJoin Component::IRC::Plugin::Connector Component::IRC::Plugin::NickReclaim);
+use POE::Component::IRC::Common qw(:ALL);
 use POSIX qw(ceil floor);
 use Readonly;
 use Time::HiRes;
@@ -220,17 +221,13 @@ event irc_public => sub {
 
 event irc_msg => sub {
 	my($self, $sender, $who, $where, $what) = @_[0, SENDER, ARG0, ARG1, ARG2];
-	my $allowed = 0;
-	for(@{$conf->{admins}}) {
-		if($who =~ /$_/i) {
-			$allowed = 1;
-			last;
-		}
-	}
-	return if !$allowed;
-	
 	my $nick = (split /!/, $who)[0];
 	$what = decode_utf8($what);
+	
+	if(!%{matches_mask_array($conf->{admins}, [$who])}) {
+		$poe_kernel->post($sender, 'privmsg', $nick, "I'm sorry Dave, I can't do that.");
+		return;
+	}
 	
 	my $command;
 	($command, $what) = split(/ /, $what, 2);
