@@ -313,22 +313,21 @@ event irc_msg => sub {
 };
 
 method queue($q) {
-	my $qid;
 	map { $q->{$_} = defined $q->{$_} ? $q->{$_} : '' } keys %$q;
 	$db->insert('fetchqueue', $q);
-	$qid = $db->{dbh}->last_insert_id('', '', 'fetchqueue', 'qid');
+	my $qid = $db->{dbh}->last_insert_id('', '', 'fetchqueue', 'qid');
 	push @{$self->{fetchqueue}}, $qid;
-	
-	my @infos = ($qid, $q->{type});
-	push @infos, $q->{id} if defined $q->{id};
-	push @infos, $q->{uri} if defined $q->{uri};
-	$log->info('Queued #' . join(':', @infos));
-	
+	if($log->is_debug) {
+		my @infos = ($qid, $q->{type});
+		push @infos, $q->{id} if defined $q->{id};
+		push @infos, $q->{uri} if defined $q->{uri};
+		$log->info('Queued #' . join(':', @infos));
+	}
 	if(!$self->{_shutdown} && !$self->{downloaderactive}) {
 		$self->{downloaderactive} = 1;
 		$self->yield('proc_fetchqueue');
 	}
-	return;
+	return $qid;
 }
 
 method requeue($q, ?$newq) {
@@ -336,8 +335,7 @@ method requeue($q, ?$newq) {
 	for(qw(type id from nick when text count desc file_dir uri file_name_ending domain)) {
 		$newq->{$_} = $q->{$_} if defined $q->{$_} && !defined $newq->{$_};
 	}
-	$self->queue($newq);
-	return;
+	return $self->queue($newq);
 }
 
 event proc_fetchqueue => sub {
