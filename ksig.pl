@@ -85,21 +85,23 @@ $db->{dbh}->do("CREATE TABLE IF NOT EXISTS fetchqueue (qid integer primary key a
 my $logger;
 my %irc_session_ids;
 
-my $http_session_id = POE::Component::Client::HTTP->spawn(
-	Alias => 'http',
-	Timeout => 45,
-	Streaming => 4096,
-	FollowRedirects => 2,
-	ConnectionManager => POE::Component::Client::Keepalive->new(
-		keep_alive    => 30,
-		max_open      => 100,
-		max_per_host  => 20,
-		timeout       => 10,
-	),
-	CookieJar => HTTP::Cookies->new(
-		file => "$ksig_dir/cookies",
-		autosave => 1,
-	),
+my $http_session_id = $poe_kernel->ID_session_to_id(
+	POE::Component::Client::HTTP->spawn(
+		Alias => 'http',
+		Timeout => 45,
+		Streaming => 4096,
+		FollowRedirects => 2,
+		ConnectionManager => POE::Component::Client::Keepalive->new(
+			keep_alive    => 30,
+			max_open      => 100,
+			max_per_host  => 20,
+			timeout       => 10,
+		),
+		CookieJar => HTTP::Cookies->new(
+			file => "$ksig_dir/cookies",
+			autosave => 1,
+		),
+	)
 );
 
 sub START {
