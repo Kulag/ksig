@@ -107,6 +107,8 @@ my $http_session_id = POE::Component::Client::HTTP->spawn(
 sub START {
 	my $self = shift;
 	
+	$poe_kernel->sig(INT => 'shutdown');
+	
 	$self->{activequeries} = {};
 	$self->{downloaderactive} = 0;
 	$self->{informqueue} = [];
