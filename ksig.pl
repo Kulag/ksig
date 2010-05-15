@@ -63,22 +63,22 @@ if(!-f "$ksig_dir/config") {
 my $conf = Config::YAML->new(
 	config => "$ksig_dir/config",
 	output => "$ksig_dir/config",
-	http_concurrent_requests => 5,
-	pixiv_username => undef,
-	pixiv_password => undef,
-	danbooru_username => undef,
 	danbooru_password => undef,
+	danbooru_username => undef,
+	http_concurrent_requests => 5,
+	irc_admins => [],
 	irc_ignore_skipped_urls => 1,
-	irc_nick => "ksig",
-	irc_servers => {
-		"irc.example.com" => { "#channel" => "key" },
-	},
+	irc_nick => 'ksig',
 	irc_quitmsg => 'ksig is shutting down.',
-	output_folder => File::HomeDir->my_home . "/ksig",
-	admins => [],
-	timezone => 'UTC',
+	irc_servers => {
+		'irc.example.com' => { '#channel' => 'key' },
+	},
+	output_folder => File::HomeDir->my_home . '/ksig',
 	pixiv_bookmark_new_illust_last_id => 0,
+	pixiv_password => undef,
+	pixiv_username => undef,
 	screen_output_level => 'info',
+	timezone => 'UTC',
 );
 $conf->read("$ksig_dir/config");
 
@@ -254,7 +254,7 @@ event irc_msg => sub {
 	my $nick = (split /!/, $who)[0];
 	$what = decode_utf8($what);
 	
-	if(!%{matches_mask_array($conf->{admins}, [$who])}) {
+	if(!%{matches_mask_array($conf->{irc_admins}, [$who])}) {
 		$poe_kernel->post($sender, 'privmsg', $nick, "I'm sorry Dave, I can't do that.");
 		return;
 	}
