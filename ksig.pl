@@ -25,6 +25,7 @@ use Digest::SHA1 qw(sha1_hex);
 use Encode;
 use File::Path qw(make_path);
 use File::HomeDir;
+use Getopt::Long;
 use HTTP::Cookies;
 use HTTP::Request;
 use HTTP::Request::Common;
@@ -48,15 +49,20 @@ binmode(STDOUT, ":utf8");
 
 $|++;
 
-mkdir File::HomeDir->my_home . "/.ksig" if !-d File::HomeDir->my_home . "/.ksig";
-if(!-f File::HomeDir->my_home . '/.ksig/config') {
-	open my $tmp, '>', File::HomeDir->my_home . '/.ksig/config' or croak "Error opening config file: $!";
+my $ksig_dir = File::HomeDir->my_home . '/.ksig';
+GetOptions(
+	'dir=s' => \$ksig_dir,
+);
+
+mkdir $ksig_dir if !-d $ksig_dir;
+if(!-f "$ksig_dir/config") {
+	open my $tmp, '>', "$ksig_dir/config" or die "Error opening config file: $!";
 	close $tmp;
 }
 
 my $conf = Config::YAML->new(
-	config => File::HomeDir->my_home . '/.ksig/config',
-	output => File::HomeDir->my_home . '/.ksig/config',
+	config => "$ksig_dir/config",
+	output => "$ksig_dir/config",
 	http_concurrent_requests => 5,
 	pixiv_username => undef,
 	pixiv_password => undef,
@@ -74,9 +80,9 @@ my $conf = Config::YAML->new(
 	pixiv_bookmark_new_illust_last_id => 0,
 	screen_output_level => 'info',
 );
-$conf->read(File::HomeDir->my_home . '/.ksig/config');
+$conf->read("$ksig_dir/config");
 
-my $db = DBI::SpeedySimple->new("dbi:SQLite:" . File::HomeDir->my_home . "/.ksig/db");
+my $db = DBI::SpeedySimple->new("dbi:SQLite:$ksig_dir/db");
 $db->{dbh}->do("CREATE TABLE IF NOT EXISTS fetchqueue (qid integer primary key autoincrement, `type` text, `id` text, `domain` text, `when` int, `count`, int, `nick` text, `text` text, `desc` text, `uri` text, `from` text, `file_name_ending` text, `file_dir` text, recurse int);");
 my $logger;
 my %irc_session_ids;
@@ -93,7 +99,7 @@ my $http_session_id = POE::Component::Client::HTTP->spawn(
 		timeout       => 10,
 	),
 	CookieJar => HTTP::Cookies->new(
-		file => File::HomeDir->my_home . "/.ksig/cookies",
+		file => "$ksig_dir/cookies",
 		autosave => 1,
 	),
 );
@@ -109,7 +115,7 @@ sub START {
 	$self->{statsactive} = 0;
 	
 	$logger = Log::Dispatch->new(
-		outputs => [['File', min_level => 'debug', filename => File::HomeDir->my_home . '/.ksig/log', newline => 1]],
+		outputs => [['File', min_level => 'debug', filename => "$ksig_dir/log", newline => 1]],
 		callbacks => sub {
 			my %p = @_;
 			if($self->{statsactive}) {
