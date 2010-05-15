@@ -29,6 +29,7 @@ use HTTP::Cookies;
 use HTTP::Request;
 use HTTP::Request::Common;
 use List::Util qw(max min);
+use Log::Any qw($log);
 use Log::Any::Adapter;
 use Log::Dispatch;
 use MooseX::POE;
@@ -77,7 +78,7 @@ $conf->read(File::HomeDir->my_home . '/.ksig/config');
 
 my $db = DBI::SpeedySimple->new("dbi:SQLite:" . File::HomeDir->my_home . "/.ksig/db");
 $db->{dbh}->do("CREATE TABLE IF NOT EXISTS fetchqueue (qid integer primary key autoincrement, `type` text, `id` text, `domain` text, `when` int, `count`, int, `nick` text, `text` text, `desc` text, `uri` text, `from` text, `file_name_ending` text, `file_dir` text, recurse int);");
-my $log;
+my $logger;
 my %irc_session_ids;
 
 my $http_session_id = POE::Component::Client::HTTP->spawn(
@@ -107,7 +108,7 @@ sub START {
 	$self->{last_stats_line_len} = 0;
 	$self->{statsactive} = 0;
 	
-	$log = Log::Dispatch->new(
+	$logger = Log::Dispatch->new(
 		outputs => [['File', min_level => 'debug', filename => File::HomeDir->my_home . '/.ksig/log', newline => 1]],
 		callbacks => sub {
 			my %p = @_;
@@ -120,7 +121,7 @@ sub START {
 			return $p{message};
 		},
 	);
-	Log::Any::Adapter->set('Dispatch', dispatcher => $log);
+	Log::Any::Adapter->set('Dispatch', dispatcher => $logger);
 	
 	for my $url (keys %{$conf->{irc_servers}}) {
 		my $irc = POE::Component::IRC::State->spawn(
