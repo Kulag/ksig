@@ -38,12 +38,8 @@ use Perl6::Subs;
 use POE qw(Component::Client::HTTP Component::IRC::State Component::IRC::Plugin::AutoJoin Component::IRC::Plugin::Connector Component::IRC::Plugin::NickReclaim);
 use POE::Component::IRC::Common qw(:ALL);
 use POSIX qw(ceil floor);
-use Readonly;
 use Time::HiRes;
 use XML::Simple;
-
-Readonly my $SPEED_AVG_WINDOW => 4000; # milliseconds, integer
-Readonly my $STATS_LINE_UPDATE_FREQ => 0.1; # seconds, float
 
 binmode(STDOUT, ":utf8");
 
@@ -78,6 +74,8 @@ my $conf = Config::YAML->new(
 	pixiv_password => undef,
 	pixiv_username => undef,
 	screen_output_level => 'info',
+	stats_speed_average_window => 4000,
+	stats_update_frequency => 0.1,
 	timezone => 'UTC',
 );
 $conf->read("$ksig_dir/config");
@@ -447,7 +445,7 @@ event stream_file => sub {
 		$q->{timelens}->{$now} = $q->{completed_length};
 		
 		for(keys %{$q->{timelens}}) {
-			delete $q->{timelens}->{$_} if $now - $SPEED_AVG_WINDOW > $_;
+			delete $q->{timelens}->{$_} if $now - $conf->{stats_speed_average_window} > $_;
 		}
 		
 		if(!$self->{statsactive}) {
@@ -510,7 +508,7 @@ event update_stats => sub {
 	$self->{last_stats_line_len} = length($stats_line);
 	print $out . $stats_line;
 	
-	$poe_kernel->delay(update_stats => $STATS_LINE_UPDATE_FREQ);
+	$poe_kernel->delay(update_stats => $conf->{stats_update_frequency});
 };
 
 method download_finished($q) {
@@ -769,7 +767,7 @@ sub calc_speed {
 	
 	if(scalar(@timelens_keys)) {
 		my($min_timelens_key, $max_timelens_key) = (min(@timelens_keys), max(@timelens_keys));
-		$speed = ($q->{timelens}->{$max_timelens_key} - $q->{timelens}->{$min_timelens_key}) / ($SPEED_AVG_WINDOW / 1000);
+		$speed = ($q->{timelens}->{$max_timelens_key} - $q->{timelens}->{$min_timelens_key}) / ($conf->{stats_speed_average_window} / 1000);
 	}
 	return $speed;
 }
