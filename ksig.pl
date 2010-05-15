@@ -41,7 +41,6 @@ use Readonly;
 use Time::HiRes;
 use XML::Simple;
 
-Readonly my $CONCURRENT_REQUESTS => 5;
 Readonly my $SPEED_AVG_WINDOW => 4000; # milliseconds, integer
 Readonly my $STATS_LINE_UPDATE_FREQ => 0.1; # seconds, float
 
@@ -58,6 +57,7 @@ if(!-f File::HomeDir->my_home . '/.ksig/config') {
 my $conf = Config::YAML->new(
 	config => File::HomeDir->my_home . '/.ksig/config',
 	output => File::HomeDir->my_home . '/.ksig/config',
+	http_concurrent_requests => 5,
 	pixiv_username => undef,
 	pixiv_password => undef,
 	danbooru_username => undef,
@@ -346,7 +346,7 @@ event proc_fetchqueue => sub {
 		return;
 	}
 	
-	if(scalar(keys %{$self->{activequeries}}) < $CONCURRENT_REQUESTS) {
+	if(scalar(keys %{$self->{activequeries}}) < $conf->{http_concurrent_requests}) {
 		my $qid = shift(@{$self->{fetchqueue}});
 		my $q = $db->fetch('fetchqueue', ['*'], {qid => $qid}, 1);
 		
@@ -367,7 +367,7 @@ event proc_fetchqueue => sub {
 		}
 	}
 	
-	if(scalar(keys %{$self->{activequeries}}) < $CONCURRENT_REQUESTS) {
+	if(scalar(keys %{$self->{activequeries}}) < $conf->{http_concurrent_requests}) {
 		$self->yield('proc_fetchqueue');
 	}
 	else {
