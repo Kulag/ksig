@@ -321,32 +321,6 @@ event irc_msg => sub {
 	return;
 };
 
-method queue($q) {
-	map { $q->{$_} = defined $q->{$_} ? $q->{$_} : '' } keys %$q;
-	$db->insert('fetchqueue', $q);
-	my $qid = $db->{dbh}->last_insert_id('', '', 'fetchqueue', 'qid');
-	push @{$self->{fetchqueue}}, $qid;
-	if($log->is_debug) {
-		my @infos = ($qid, $q->{type});
-		push @infos, $q->{id} if defined $q->{id};
-		push @infos, $q->{uri} if defined $q->{uri};
-		$log->debug('Queued #' . join(':', @infos));
-	}
-	if(!$self->{_shutdown} && !$self->{downloaderactive}) {
-		$self->{downloaderactive} = 1;
-		$self->yield('proc_fetchqueue');
-	}
-	return $qid;
-}
-
-method requeue($q, ?$newq) {
-	$newq = $newq // {};
-	for(qw(type id from nick when text count desc file_dir uri file_name_ending domain)) {
-		$newq->{$_} = $q->{$_} if defined $q->{$_} && !defined $newq->{$_};
-	}
-	return $self->queue($newq);
-}
-
 event proc_fetchqueue => sub {
 	my $self = shift;
 	if(!scalar @{$self->{fetchqueue}} || $self->{_shutdown}) {
@@ -512,6 +486,32 @@ event update_stats => sub {
 	
 	$poe_kernel->delay(update_stats => $conf->{stats_update_frequency});
 };
+
+method queue($q) {
+	map { $q->{$_} = defined $q->{$_} ? $q->{$_} : '' } keys %$q;
+	$db->insert('fetchqueue', $q);
+	my $qid = $db->{dbh}->last_insert_id('', '', 'fetchqueue', 'qid');
+	push @{$self->{fetchqueue}}, $qid;
+	if($log->is_debug) {
+		my @infos = ($qid, $q->{type});
+		push @infos, $q->{id} if defined $q->{id};
+		push @infos, $q->{uri} if defined $q->{uri};
+		$log->debug('Queued #' . join(':', @infos));
+	}
+	if(!$self->{_shutdown} && !$self->{downloaderactive}) {
+		$self->{downloaderactive} = 1;
+		$self->yield('proc_fetchqueue');
+	}
+	return $qid;
+}
+
+method requeue($q, ?$newq) {
+	$newq = $newq // {};
+	for(qw(type id from nick when text count desc file_dir uri file_name_ending domain)) {
+		$newq->{$_} = $q->{$_} if defined $q->{$_} && !defined $newq->{$_};
+	}
+	return $self->queue($newq);
+}
 
 method download_finished($q) {
 	$self->clear_download($q);
