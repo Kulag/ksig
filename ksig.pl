@@ -322,7 +322,7 @@ method queue($q) {
 		my @infos = ($qid, $q->{type});
 		push @infos, $q->{id} if defined $q->{id};
 		push @infos, $q->{uri} if defined $q->{uri};
-		$log->info('Queued #' . join(':', @infos));
+		$log->debug('Queued #' . join(':', @infos));
 	}
 	if(!$self->{_shutdown} && !$self->{downloaderactive}) {
 		$self->{downloaderactive} = 1;
