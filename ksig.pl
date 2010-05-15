@@ -148,7 +148,7 @@ sub START {
 	
 	if(@{$self->{fetchqueue}}) {
 		$self->{downloaderactive} = 1;
-		$self->yield("proc_fetchqueue");
+		$self->yield("http_process_queue");
 	}
 	return;
 }
@@ -321,7 +321,7 @@ event irc_msg => sub {
 	return;
 };
 
-event proc_fetchqueue => sub {
+event http_process_queue => sub {
 	my $self = shift;
 	if(!scalar @{$self->{fetchqueue}} || $self->{_shutdown}) {
 		$self->{downloaderactive} = 0;
@@ -350,15 +350,15 @@ event proc_fetchqueue => sub {
 	}
 	
 	if(scalar(keys %{$self->{activequeries}}) < $conf->{http_concurrent_requests}) {
-		$self->yield('proc_fetchqueue');
+		$self->yield('http_process_queue');
 	}
 	else {
-		$poe_kernel->delay('proc_fetchqueue', 0.1);
+		$poe_kernel->delay('http_process_queue', 0.1);
 	}
 	return;
 };
 
-event stream_file => sub {
+event http_stream_q => sub {
 	my($self, $req, $qid, $res, $chunk) = ($_[0], @{$_[ARG0]}, @{$_[ARG1]});
 	my $q = $self->{activequeries}->{$qid};
 	if(!defined $q) {
@@ -426,7 +426,7 @@ event stream_file => sub {
 		
 		if(!$self->{statsactive}) {
 			$self->{statsactive} = 1;
-			$self->yield('update_stats');
+			$self->yield('stats_update');
 		}
 	}
 	else {
@@ -435,7 +435,7 @@ event stream_file => sub {
 	return;
 };
 
-event update_stats => sub {
+event stats_update => sub {
 	my $self = shift;
 	# First blank the last stats line to prevent trailing garbage.
 	my $out = "\r" . (' ' x $self->{last_stats_line_len}) . "\r";
@@ -484,7 +484,7 @@ event update_stats => sub {
 	$self->{last_stats_line_len} = length($stats_line);
 	print $out . $stats_line;
 	
-	$poe_kernel->delay(update_stats => $conf->{stats_update_frequency});
+	$poe_kernel->delay(stats_update => $conf->{stats_update_frequency});
 };
 
 method queue($q) {
@@ -500,7 +500,7 @@ method queue($q) {
 	}
 	if(!$self->{_shutdown} && !$self->{downloaderactive}) {
 		$self->{downloaderactive} = 1;
-		$self->yield('proc_fetchqueue');
+		$self->yield('http_process_queue');
 	}
 	return $qid;
 }
@@ -548,13 +548,13 @@ method download_file($q) {
 		$q->{completed_length} = -s $q->{file_path};
 	}
 	$r->header(Referer => 'http://pixiv.net') if($q->{uri} =~ m!^http://img\d+\.pixiv\.net!);
-	$poe_kernel->post('http', 'request', 'stream_file', $r, $q->{qid});
+	$poe_kernel->post('http', 'request', 'http_stream_q', $r, $q->{qid});
 	return 1;
 }
 method handle_file_completion($q) {}
 
 method download_pixivlogin($q) {
-	$poe_kernel->post('http', 'request', 'stream_file', POST('http://www.pixiv.net/index.php', Content => {mode => 'login', pixiv_id => $conf->{pixiv_username}, pass => $conf->{pixiv_password}, skip => 1}), $q->{qid});
+	$poe_kernel->post('http', 'request', 'http_stream_q', POST('http://www.pixiv.net/index.php', Content => {mode => 'login', pixiv_id => $conf->{pixiv_username}, pass => $conf->{pixiv_password}, skip => 1}), $q->{qid});
 	return 1;
 }
 
@@ -566,7 +566,7 @@ method handle_pixivlogin_completion($q) {
 }
 
 method download_pixivrelogin($q) {
-	$poe_kernel->post('http', 'request', 'stream_file', POST('http://www.pixiv.net/logout.php'), $q->{qid});
+	$poe_kernel->post('http', 'request', 'http_stream_q', POST('http://www.pixiv.net/logout.php'), $q->{qid});
 	return 1;
 }
 
@@ -578,7 +578,7 @@ method handle_pixivrelogin_completion($q) {
 
 method download_pixivimage($q) {
 	return 0 if $self->{pixivloggingin};
-	$poe_kernel->post('http', 'request', 'stream_file', GET("http://www.pixiv.net/member_illust.php?mode=medium&illust_id=$q->{id}"), $q->{qid});
+	$poe_kernel->post('http', 'request', 'http_stream_q', GET("http://www.pixiv.net/member_illust.php?mode=medium&illust_id=$q->{id}"), $q->{qid});
 	return 1;
 }
 
@@ -621,7 +621,7 @@ method handle_pixivimage_completion($q) {
 
 method download_pixivmanga($q) {
 	return 0 if $self->{pixivloggingin};
-	$poe_kernel->post('http', 'request', 'stream_file', GET("http://www.pixiv.net/member_illust.php?mode=manga&illust_id=$q->{id}"), $q->{qid});
+	$poe_kernel->post('http', 'request', 'http_stream_q', GET("http://www.pixiv.net/member_illust.php?mode=manga&illust_id=$q->{id}"), $q->{qid});
 	return 1;
 }
 
@@ -675,7 +675,7 @@ method download_pixiv_bookmark_new_illust($q) {
 	return 0 if $self->{pixivloggingin};
 	my $r = GET('http://www.pixiv.net/bookmark_new_illust.php?mode=new&p=' . (defined $q->{uri} ? $q->{uri} : 1));
 	$r->header(Referer => 'http://www.pixiv.net/mypage.php') if !defined $q->{uri};
-	$poe_kernel->post('http', 'request', 'stream_file', $r, $q->{qid});
+	$poe_kernel->post('http', 'request', 'http_stream_q', $r, $q->{qid});
 	return 1;
 }
 
@@ -697,7 +697,7 @@ method handle_pixiv_bookmark_new_illust_completion($q) {
 
 method download_pixiv_member_illust($q) {
 	return 0 if $self->{pixivloggingin};
-	$poe_kernel->post('http', 'request', 'stream_file', GET("http://www.pixiv.net/member_illust.php?id=$q->{id}" . (defined $q->{uri} ? "&p=$q->{uri}" : '')), $q->{qid});
+	$poe_kernel->post('http', 'request', 'http_stream_q', GET("http://www.pixiv.net/member_illust.php?id=$q->{id}" . (defined $q->{uri} ? "&p=$q->{uri}" : '')), $q->{qid});
 	return 1;
 }
 
@@ -721,7 +721,7 @@ method handle_pixiv_member_illust_completion($q) {
 }
 
 method download_danbooruimage($q) {
-	$poe_kernel->post('http', 'request', 'stream_file', make_danbooru_request($q->{domain}, 'post/index', {tags => "id:$q->{id}"}), $q->{qid});
+	$poe_kernel->post('http', 'request', 'http_stream_q', make_danbooru_request($q->{domain}, 'post/index', {tags => "id:$q->{id}"}), $q->{qid});
 	return 1;
 }
 
