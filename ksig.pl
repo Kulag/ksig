@@ -370,7 +370,8 @@ event http_stream_q => sub {
 			return if $res->content =~ /request canceled/;
 			if($res->content =~ /component shut down/) {
 				$log->info("Closing #$qid in preparation for component shutdown.");
-				$self->clear_download($q);
+				close $q->{outfh} if $q->{outfh};
+				delete $self->{activequeries}->{$q->{qid}};
 				return;
 			}
 			$self->requeue($q);
