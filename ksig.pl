@@ -608,7 +608,7 @@ method handle_pixivimage_completion($q) {
 				open F, ">pixivimageregex-failed-$q->{id}";
 				print F encode_utf8($buf);
 				close F;
-				croak "pixivimage regex failed on $q->{id}";
+				carp "pixivimage regex failed on $q->{id}";
 			}
 		}
 	}
