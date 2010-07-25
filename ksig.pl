@@ -708,7 +708,7 @@ method handle_pixiv_member_illust_completion($q) {
 	
 	my $page = int($q->{uri} ? $q->{uri} : 1);
 	if($page == 1) {
-		$buf =~ /投稿数：(\d+)件/; #Post count: \d+ items
+		$buf =~ m!<span> (\d+)件</span>!; # Post count
 		my $items = int($1);
 		my $pages = ceil($items / 20);
 		if($pages > 1) {
