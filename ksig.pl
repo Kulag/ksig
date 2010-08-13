@@ -236,27 +236,27 @@ event irc_msg => sub {
 			for(split / /, $what) {
 				given($_) {
 					when(m!http://img\d+\.pixiv\.net/img/.*?/(\d+)!) {
-						$self->queue({from => $who, type => 'pixivimage', id => $1});
+						$self->queue({from => $who, when => time, type => 'pixivimage', id => $1});
 					}
 					when(m!http://(?:www\.)?pixiv\.net/member_illust\.php\?mode=(?:medium|big)&illust_id=(\d+)!i) {
-						$self->queue({from => $who, type => 'pixivimage', id => $1});
+						$self->queue({from => $who, when => time, type => 'pixivimage', id => $1});
 					}
 					when(m!http://(?:www\.)?pixiv\.net/member_illust\.php\?mode=manga&illust_id=(\d+)!i) {
-						$self->queue({from => $who, type => 'pixivmanga', id => $1});
+						$self->queue({from => $who, when => time, type => 'pixivmanga', id => $1});
 					}
 					when(m!http://(?:www\.)?(danbooru\.donmai\.us|konachan\.(?:com|net)|moe.imouto.org)/post/show/(\d+)!i) {
 						my $domain = $1;
-						$self->queue({from => $who, type => 'danbooruimage', domain => $domain, id => $2});
+						$self->queue({from => $who, when => time, type => 'danbooruimage', domain => $domain, id => $2});
 					}
 					when(m!^pixivbni(?:#(\d+))?!i) {
 						my $id = (defined $1 ? int($1) : $vs->get('pixiv_bookmark_new_illust_last_id'));
-						$self->queue({from => $who, type => 'pixiv_bookmark_new_illust', id => $id});
+						$self->queue({from => $who, when => time, type => 'pixiv_bookmark_new_illust', id => $id});
 					}
 					when(m!^http://www\.pixiv\.net/member_illust.php\?id=(\d+)!) {
-						$self->queue({from => $who, type => 'pixiv_member_illust', id => $1});
+						$self->queue({from => $who, when => time, type => 'pixiv_member_illust', id => $1});
 					}
 					when(m!(.*?)(http://.*)!i) {
-						$self->queue({from => $who, type => 'file', uri => $2, text => $1});
+						$self->queue({from => $who, when => time, type => 'file', uri => $2, text => $1});
 					}
 					default {
 						$poe_kernel->post($sender, 'privmsg', $nick, "Don't know how to grab '$what'.");
@@ -498,7 +498,12 @@ method download_finished($q) {
 }
 
 method clear_download($q) {
-	close $q->{outfh} if $q->{outfh};
+	if($q->{outfh}) {
+		if($conf->file_timestamps_use_mtime) {
+			utime(time(), $q->{when}, $q->{outfh});
+		}
+		close $q->{outfh};
+	}
 	delete $self->{activequeries}->{$q->{qid}};
 	$db->remove('fetchqueue', {qid => $q->{qid}});
 	return;
@@ -780,10 +785,8 @@ sub make_file_name {
 	
 	my @fn;
 	my $fne = (defined $q->{file_name_ending} ? $q->{file_name_ending} : $q->{uri});
-	if(defined $q->{when}) {
-		my $when = DateTime->from_epoch(epoch => $q->{when});
-		$when = $when->set_time_zone($conf->timezone);
-		push @fn, sprintf("[%s]", $when->strftime("%F %T"));
+	if(defined $q->{when} && !$conf->file_timestamps_use_mtime) {
+		push @fn, sprintf("[%s]", get_datetime($q->{when})->strftime("%F %T"));
 	}
 	push @fn, "<$q->{nick}>" if defined $q->{nick};
 	
@@ -803,6 +806,13 @@ sub make_file_name {
 	my $filename = join(' ', @fn);
 	$filename =~ s/\//∕/g;
 	return $filename;
+}
+
+sub get_datetime {
+	my $time = shift;
+	my $when = DateTime->from_epoch(epoch => $time);
+	$when = $when->set_time_zone($conf->timezone);
+	return $when;
 }
 
 ksig->new;
