@@ -41,6 +41,8 @@ use POSIX qw(ceil floor);
 use Time::HiRes;
 use XML::Simple;
 
+use ksig::VariableStore;
+
 binmode(STDOUT, ":utf8");
 
 $|++;
@@ -70,7 +72,6 @@ my $conf = Config::YAML->new(
 		'irc.example.com' => { '#channel' => 'key' },
 	},
 	output_folder => File::HomeDir->my_home . '/ksig',
-	pixiv_bookmark_new_illust_last_id => 0,
 	pixiv_password => undef,
 	pixiv_username => undef,
 	screen_output_level => 'info',
@@ -82,6 +83,8 @@ $conf->read("$ksig_dir/config");
 
 my $db = DBI::SpeedySimple->new("dbi:SQLite:$ksig_dir/db");
 $db->{dbh}->do("CREATE TABLE IF NOT EXISTS fetchqueue (qid integer primary key autoincrement, `type` text, `id` text, `domain` text, `when` int, `count`, int, `nick` text, `text` text, `desc` text, `uri` text, `from` text, `file_name_ending` text, `file_dir` text, recurse int);");
+my $vs = ksig::VariableStore->new(db => $db);
+
 my $logger;
 my %irc_session_ids;
 
@@ -279,7 +282,7 @@ event irc_msg => sub {
 						$self->queue({from => $who, type => 'danbooruimage', domain => $domain, id => $2});
 					}
 					when(m!^pixivbni(?:#(\d+))?!i) {
-						my $id = (defined $1 ? int($1) : $conf->{pixiv_bookmark_new_illust_last_id});
+						my $id = (defined $1 ? int($1) : $vs->get('pixiv_bookmark_new_illust_last_id'));
 						$self->queue({from => $who, type => 'pixiv_bookmark_new_illust', id => $id});
 					}
 					when(m!^http://www\.pixiv\.net/member_illust.php\?id=(\d+)!) {
@@ -687,8 +690,7 @@ method handle_pixiv_bookmark_new_illust_completion($q) {
 	while($buf =~ m!src="http://img\d+.pixiv.net/img/.+?/(\d+)_s.\w+" alt=".+?"!g) {
 		$self->{pixiv_bni_last_id} = int($1) if !defined $self->{pixiv_bni_last_id} || int($1) > $self->{pixiv_bni_last_id};
 		if(int($1) <= $q->{id}) {
-			$conf->{pixiv_bookmark_new_illust_last_id} = $self->{pixiv_bni_last_id};
-			$conf->write;
+			$vs->set('pixiv_bookmark_new_illust_last_id', $self->{pixiv_bni_last_id});
 			return;
 		}
 		$self->requeue($q, {type => 'pixivimage', id => $1, file_dir => "pixiv_bookmark_new_illust_from_$q->{id}"});
