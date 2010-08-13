@@ -16,7 +16,6 @@ package ksig;
 
 use 5.010;
 use Carp;
-use Config::YAML;
 use common::sense;
 use Data::Dumper;
 use DateTime;
@@ -41,47 +40,14 @@ use POSIX qw(ceil floor);
 use Time::HiRes;
 use XML::Simple;
 
+use ksig::conf;
 use ksig::VariableStore;
 
 binmode(STDOUT, ":utf8");
-
 $|++;
 
-my $ksig_dir = File::HomeDir->my_home . '/.ksig';
-GetOptions(
-	'dir=s' => \$ksig_dir,
-);
-
-mkdir $ksig_dir if !-d $ksig_dir;
-if(!-f "$ksig_dir/config") {
-	open my $tmp, '>', "$ksig_dir/config" or die "Error opening config file: $!";
-	close $tmp;
-}
-
-my $conf = Config::YAML->new(
-	config => "$ksig_dir/config",
-	output => "$ksig_dir/config",
-	danbooru_password => undef,
-	danbooru_username => undef,
-	http_concurrent_requests => 5,
-	irc_admins => [],
-	irc_ignore_skipped_urls => 1,
-	irc_nick => 'ksig',
-	irc_quitmsg => 'ksig is shutting down.',
-	irc_servers => {
-		'irc.example.com' => { '#channel' => 'key' },
-	},
-	output_folder => File::HomeDir->my_home . '/ksig',
-	pixiv_password => undef,
-	pixiv_username => undef,
-	screen_output_level => 'info',
-	stats_speed_average_window => 4000,
-	stats_update_frequency => 0.1,
-	timezone => 'UTC',
-);
-$conf->read("$ksig_dir/config");
-
-my $db = DBI::SpeedySimple->new("dbi:SQLite:$ksig_dir/db");
+my $conf = ksig::conf->new_with_options;
+my $db = DBI::SpeedySimple->new($conf->database);
 $db->{dbh}->do("CREATE TABLE IF NOT EXISTS fetchqueue (qid integer primary key autoincrement, `type` text, `id` text, `domain` text, `when` int, `count`, int, `nick` text, `text` text, `desc` text, `uri` text, `from` text, `file_name_ending` text, `file_dir` text, recurse int);");
 my $vs = ksig::VariableStore->new(db => $db);
 
@@ -101,7 +67,7 @@ my $http_session_id = $poe_kernel->ID_session_to_id(
 			timeout       => 10,
 		),
 		CookieJar => HTTP::Cookies->new(
-			file => "$ksig_dir/cookies",
+			file => $conf->cookies_file,
 			autosave => 1,
 		),
 	)
@@ -120,7 +86,7 @@ sub START {
 	$self->{statsactive} = 0;
 	
 	$logger = Log::Dispatch->new(
-		outputs => [['File', min_level => 'debug', filename => "$ksig_dir/log", newline => 1]],
+		outputs => ($conf->has_log_file ? [['File', min_level => 'debug', filename => $conf->log_file, newline => 1]] : []),
 		callbacks => sub {
 			my %p = @_;
 			if($self->{statsactive}) {
@@ -134,13 +100,14 @@ sub START {
 	);
 	Log::Any::Adapter->set('Dispatch', dispatcher => $logger);
 	
-	for my $url (keys %{$conf->{irc_servers}}) {
+	my %irc_servers = %{$conf->irc_servers};
+	for my $url (keys %irc_servers) {
 		my $irc = POE::Component::IRC::State->spawn(
-			Nick => $conf->{irc_nick},
+			Nick => $conf->irc_nick,
 			Server => $url,
 		);
 		
-		$irc->plugin_add('AutoJoin', POE::Component::IRC::Plugin::AutoJoin->new(Channels => $conf->{irc_servers}->{$url}, RejoinOnKick => 1, Retry_when_banned => 1));
+		$irc->plugin_add('AutoJoin', POE::Component::IRC::Plugin::AutoJoin->new(Channels => $irc_servers{$url}, RejoinOnKick => 1, Retry_when_banned => 1));
 		$irc->plugin_add('Connector', POE::Component::IRC::Plugin::Connector->new(servers => \($url)));
 		$irc->plugin_add('NickReclaim', POE::Component::IRC::Plugin::NickReclaim->new());
 		
@@ -172,7 +139,7 @@ event shutdown => sub {
 			$http_session_id = 0;
 		}
 		for(keys %irc_session_ids) {
-			$poe_kernel->post($_, 'shutdown', $conf->{irc_quitmsg});
+			$poe_kernel->post($_, 'shutdown', $conf->irc_quitmsg);
 		}
 		$conf->write;
 	}
@@ -184,7 +151,7 @@ event irc_join => sub {
 	my($self, $sender, $nick, $channel) = @_[0, SENDER, ARG0, ARG1];
 	my $irc = $sender->get_heap;
 	($nick, my $vhost) = split '!', $nick;
-	if($nick eq $conf->{irc_nick}) {
+	if($nick eq $conf->irc_nick) {
 		$log->info("Listening on $channel\@". $irc->server_name);
 	}
 	return;
@@ -209,7 +176,7 @@ event irc_public => sub {
 	for(split / /, $what) {
 		given($_) {
 			when('!skip') {
-				return if $conf->{irc_ignore_skipped_urls};
+				return if $conf->irc_ignore_skipped_urls;
 			}
 			when(m!http://img\d+\.pixiv\.net/img/.*?/(\d+)!) {
 				$queue->();
@@ -257,7 +224,7 @@ event irc_msg => sub {
 	my $nick = (split /!/, $who)[0];
 	$what = decode_utf8($what);
 	
-	if(!%{matches_mask_array($conf->{irc_admins}, [$who])}) {
+	if(!%{matches_mask_array($conf->irc_admins, [$who])}) {
 		$poe_kernel->post($sender, 'privmsg', $nick, "I'm sorry Dave, I can't do that.");
 		return;
 	}
@@ -331,7 +298,7 @@ event http_process_queue => sub {
 		return;
 	}
 	
-	if(scalar(keys %{$self->{activequeries}}) < $conf->{http_concurrent_requests}) {
+	if(scalar(keys %{$self->{activequeries}}) < $conf->http_concurrent_requests) {
 		my $qid = shift(@{$self->{fetchqueue}});
 		my $q = $db->fetch('fetchqueue', ['*'], {qid => $qid}, 1);
 		
@@ -352,7 +319,7 @@ event http_process_queue => sub {
 		}
 	}
 	
-	if(scalar(keys %{$self->{activequeries}}) < $conf->{http_concurrent_requests}) {
+	if(scalar(keys %{$self->{activequeries}}) < $conf->http_concurrent_requests) {
 		$self->yield('http_process_queue');
 	}
 	else {
@@ -425,7 +392,7 @@ event http_stream_q => sub {
 		$q->{timelens}->{$now} = $q->{completed_length};
 		
 		for(keys %{$q->{timelens}}) {
-			delete $q->{timelens}->{$_} if $now - $conf->{stats_speed_average_window} > $_;
+			delete $q->{timelens}->{$_} if $now - $conf->stats_speed_average_window > $_;
 		}
 		
 		if(!$self->{statsactive}) {
@@ -488,7 +455,7 @@ event stats_update => sub {
 	$self->{last_stats_line_len} = length($stats_line);
 	print $out . $stats_line;
 	
-	$poe_kernel->delay(stats_update => $conf->{stats_update_frequency});
+	$poe_kernel->delay(stats_update => $conf->stats_update_frequency);
 };
 
 method queue($q) {
@@ -539,7 +506,7 @@ method clear_download($q) {
 
 # Downloaders and completion handlers.
 method download_file($q) {
-	my $file_dir = encode_utf8("$conf->{output_folder}/$q->{from}" . (defined $q->{file_dir} ? "/$q->{file_dir}" : ""));
+	my $file_dir = encode_utf8($conf->output_folder . "/$q->{from}" . (defined $q->{file_dir} ? "/$q->{file_dir}" : ""));
 	$q->{file_name} = make_file_name($q, $file_dir) if !defined $q->{file_name};
 	make_path($file_dir) if !-d $file_dir;
 	$q->{file_path} = "$file_dir/" . encode_utf8($q->{file_name});
@@ -558,7 +525,7 @@ method download_file($q) {
 method handle_file_completion($q) {}
 
 method download_pixivlogin($q) {
-	$poe_kernel->post('http', 'request', 'http_stream_q', POST('http://www.pixiv.net/index.php', Content => {mode => 'login', pixiv_id => $conf->{pixiv_username}, pass => $conf->{pixiv_password}, skip => 1}), $q->{qid});
+	$poe_kernel->post('http', 'request', 'http_stream_q', POST('http://www.pixiv.net/index.php', Content => {mode => 'login', pixiv_id => $conf->pixiv_username, pass => $conf->pixiv_password, skip => 1}), $q->{qid});
 	return 1;
 }
 
@@ -590,7 +557,7 @@ method handle_pixivimage_completion($q) {
 	my $buf = decode_utf8($q->{buf});
 	return $self->requeue($q) if $buf !~ /<\/html>/;
 	
-	if($conf->{pixiv_username}) {
+	if($conf->pixiv_username) {
 		return if !$self->check_pixiv_login($q, $buf);
 		given($buf) {
 			when(/あなたが18/) {
@@ -772,7 +739,7 @@ sub calc_speed {
 	
 	if(scalar(@timelens_keys)) {
 		my($min_timelens_key, $max_timelens_key) = (min(@timelens_keys), max(@timelens_keys));
-		$speed = ($q->{timelens}->{$max_timelens_key} - $q->{timelens}->{$min_timelens_key}) / ($conf->{stats_speed_average_window} / 1000);
+		$speed = ($q->{timelens}->{$max_timelens_key} - $q->{timelens}->{$min_timelens_key}) / ($conf->stats_speed_average_window / 1000);
 	}
 	return $speed;
 }
@@ -801,9 +768,9 @@ sub fmt_timedelta {
 
 sub make_danbooru_request {
 	my($domain, $func, $options) = @_;
-	if($domain eq 'danbooru.donmai.us' && defined $conf->{danbooru_username}) {
-		$options->{login} = $conf->{danbooru_username};
-		$options->{password_hash} = sha1_hex("choujin-steiner--$conf->{danbooru_password}--");
+	if($domain eq 'danbooru.donmai.us' && defined $conf->danbooru_username) {
+		$options->{login} = $conf->danbooru_username;
+		$options->{password_hash} = sha1_hex('choujin-steiner--' . $conf->danbooru_password . '--');
 	}
 	return HTTP::Request->new(GET => sprintf("http://%s/%s.xml?%s", $domain, $func, join("&", map { "$_=$options->{$_}" } keys %{$options})));
 }
@@ -815,7 +782,7 @@ sub make_file_name {
 	my $fne = (defined $q->{file_name_ending} ? $q->{file_name_ending} : $q->{uri});
 	if(defined $q->{when}) {
 		my $when = DateTime->from_epoch(epoch => $q->{when});
-		$when = $when->set_time_zone($conf->{timezone});
+		$when = $when->set_time_zone($conf->timezone);
 		push @fn, sprintf("[%s]", $when->strftime("%F %T"));
 	}
 	push @fn, "<$q->{nick}>" if defined $q->{nick};
