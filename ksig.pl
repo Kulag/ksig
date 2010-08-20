@@ -513,11 +513,13 @@ method clear_download($q) {
 # Downloaders and completion handlers.
 method download_file($q) {
 	my $file_dir = encode_utf8($conf->output_folder . "/$q->{from}" . (defined $q->{file_dir} ? "/$q->{file_dir}" : ""));
+	if(!$q->{file_name_ending}) {
+		($q->{file_name_ending} = $q->{uri}) =~ s!^https?://(www\.)?!!;
+	}
 	$q->{file_name} = make_file_name($q, $file_dir) if !defined $q->{file_name};
 	make_path($file_dir) if !-d $file_dir;
 	$q->{file_path} = "$file_dir/" . encode_utf8($q->{file_name});
-	
-	
+
 	my $r = GET $q->{uri};
 	$r->header(Accept_Ranges => 'bytes');
 	if(-f $q->{file_path}) {
@@ -578,7 +580,7 @@ method handle_pixivimage_completion($q) {
 				$self->requeue($q, {type => 'pixivmanga', id => $q->{id}});
 			}
 			when(m!<title>(.*?)のイラスト \[pixiv\]</title>.*?http://(img\d+)\.pixiv\.net/img/(.*?)/$q->{id}_m.(\w+)!s) {
-				$self->requeue($q, {type => 'file', uri => "http://$2.pixiv.net/img/$3/$q->{id}.$4", file_name_ending => "pixiv:$q->{id} $1.$4"});
+				$self->requeue($q, {type => 'file', uri => "http://$2.pixiv.net/img/$3/$q->{id}.$4", file_name_ending => "pixiv $q->{id} $1.$4"});
 			}
 			default {
 				open F, ">pixivimageregex-failed-$q->{id}";
@@ -590,7 +592,7 @@ method handle_pixivimage_completion($q) {
 	}
 	else {
 		if($buf =~ m!<title>(.*?)のイラスト \[pixiv\]</title>.*?http://(img\d+)\.pixiv\.net/img/(.*?)/$q->{id}_s.(\w+)!s) {
-			$self->requeue($q, {type => 'file', uri => "http:\/\/$2.pixiv.net\/img\/$3\/$q->{id}.$4", file_name_ending => "pixiv:$q->{id} $1.$4"});
+			$self->requeue($q, {type => 'file', uri => "http:\/\/$2.pixiv.net\/img\/$3\/$q->{id}.$4", file_name_ending => "pixiv $q->{id} $1.$4"});
 		}
 		# Otherwise, it's probably R-18, but pixiv doesn't return anything to tell us that if we aren't logged in.
 	}
@@ -643,7 +645,7 @@ method handle_pixivmanga_completion($q) {
 		$self->requeue($q, {
 			type => 'file',
 			uri => "http://$imageurl->[0].pixiv.net/img/$imageurl->[1]/$q->{id}_p$imageurl->[2].$imageurl->[3]",
-			file_name_ending => "pixiv:$q->{id} $title P$imageurl->[2].$imageurl->[3]",
+			file_name_ending => "pixiv $q->{id} $title P$imageurl->[2].$imageurl->[3]",
 		});
 	}
 }
@@ -703,11 +705,8 @@ method download_danbooruimage($q) {
 
 method handle_danbooruimage_completion($q) {
 	my $r = (XMLin(decode_utf8($q->{buf})))->{post};
-	$r->{file_url} =~ /\/([^\/]+)$/;
-	my $fne = $1;
-	$fne =~ s/%20(\d+).*?\.(\w+)$/moe #$1.$2/ if $q->{domain} eq 'moe.imouto.org';
-	
-	$self->requeue($q, {type => 'file', desc => $r->{tags}, uri => $r->{file_url}, file_name_ending => $fne});
+	$r->{file_url} =~ /\.(\w{3,4})$/;
+	$self->requeue($q, {type => 'file', desc => $r->{tags}, uri => $r->{file_url}, file_name_ending => "$q->{domain} $q->{id}.$1"});
 }
 
 method check_pixiv_login($q, $buf) {
@@ -783,27 +782,26 @@ sub make_danbooru_request {
 
 sub make_file_name {
 	my($q, $file_dir) = @_;
-	
+
 	my @fn;
-	my $fne = (defined $q->{file_name_ending} ? $q->{file_name_ending} : $q->{uri});
 	if(defined $q->{when} && !$conf->file_timestamps_use_mtime) {
 		push @fn, sprintf("[%s]", get_datetime($q->{when})->strftime("%F %T"));
 	}
 	push @fn, "<$q->{nick}>" if defined $q->{nick};
-	
+
 	my $text = defined $q->{text} ? $q->{text} : '';
-	while(length(encode_utf8(join(' ', @fn) . "$file_dir $text >> $fne")) >= 255 and $text ne '') {
+	while(length(encode_utf8(join(' ', @fn) . "$file_dir $text >> $q->{file_name_ending}")) >= 255 and $text ne '') {
 		$text = substr($text, 0, length($text) - 2);
 	}
-	push @fn, "$text >>" if $text ne '';	
-	
+	push @fn, "$text >>" if $text ne '';
+
 	my $desc = defined $q->{desc} ? $q->{desc} : '';
-	while(length(encode_utf8(join(' ', @fn) . "$file_dir $desc $fne")) >= 255 and $desc ne '') {
+	while(length(encode_utf8(join(' ', @fn) . "$file_dir $desc $q->{file_name_ending}")) >= 255 and $desc ne '') {
 		$desc = substr($desc, 0, length($desc) - 2);
 	}
 	push @fn, $desc if $desc ne '';
-	
-	push @fn, $fne;
+
+	push @fn, $q->{file_name_ending};
 	my $filename = join(' ', @fn);
 	$filename =~ s/\//∕/g;
 	return $filename;
