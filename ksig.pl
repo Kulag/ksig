@@ -419,7 +419,8 @@ event stats_update => sub {
 	
 	# Stop updating if there's nothing going on.
 	if(!scalar(keys %{$self->{activequeries}})) {
-		say $out . 'Queue finished.';
+		print $out;
+		$log->debug('Queue finished.');
 		$self->{last_stats_line_len} = 0;
 		$self->{statsactive} = 0;
 		return;
@@ -487,7 +488,7 @@ method requeue($q, ?$newq) {
 method download_finished($q) {
 	$self->clear_download($q);
 	my $transfer_timedelta = Time::HiRes::time() - $q->{starttime};
-	$log->info(sprintf("Finished #%d. %s transferred in %s (avg %s/s).",
+	$log->notice(sprintf("Finished #%d. %s transferred in %s (avg %s/s).",
 		$q->{qid},
 		fmt_size($q->{completed_length} - $q->{startpos}),
 		fmt_timedelta($transfer_timedelta),
