@@ -803,7 +803,12 @@ sub make_file_name {
 
 	push @fn, $q->{file_name_ending};
 	my $filename = join(' ', @fn);
-	$filename =~ s/\//∕/g;
+	if($conf->windows_compatible_filenames) {
+		$filename =~ tr!\?"/\\<>\|:\*!？”∕￥＜＞｜：＊!;
+	}
+	else {
+		$filename =~ s!/!∕!g;
+	}
 	return $filename;
 }
 

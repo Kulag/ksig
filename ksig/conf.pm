@@ -40,5 +40,6 @@ has 'screen_output_level' => (is => 'rw', isa => 'Str', required => 1, default =
 has 'stats_speed_average_window' => (is => 'rw', isa => 'Int', required => 1, default => 4000, documentation => 'How large a window (in milliseconds) to use for the current speed calculation.');
 has 'stats_update_frequency' => (is => 'rw', isa => 'Num', required => 1, default => 0.1, documentation => 'How often (in seconds) to update the stats line at the bottom of the terminal.');
 has 'timezone' => (is => 'rw', isa => 'Str', required => 1, default => 'UTC', documentation => "The timezone to use for dates in the downloaded files' filenames.");
+has 'windows_compatible_filenames' => (is => 'rw', isa => 'Bool', required => 1, default => 0, documentation => 'Default: false. Set to true to make Windows not shit bricks.');
 
 1;
