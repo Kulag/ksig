@@ -23,9 +23,14 @@ method BUILD(*@vars) {
 	$self->db->{dbh}->do('CREATE TABLE IF NOT EXISTS variable (`key` text, `val` text);');
 }
 
-method get(Str $key, Int ?$reset) {
+method get(Str $key, Str ?$default, Int ?$reset) {
 	if(!exists $self->{cache}->{$key} || $reset) {
-		$self->{cache}->{$key} = ($self->db->fetch('variable', 'value', {key => $key}, 1))->{val};
+		if(my $r = $self->db->fetch('variable', ['val'], {key => $key}, 1)) {
+			$self->{cache}->{$key} = $r->{val};
+		}
+		else {
+			return $default;
+		}
 	}
 	return $self->{cache}->{$key};
 }
