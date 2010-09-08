@@ -23,7 +23,7 @@ use DBI::SpeedySimple;
 use Digest::SHA1 qw(sha1_hex);
 use Encode;
 use File::Path qw(make_path);
-use File::HomeDir;
+use File::Basename 'dirname';
 use Getopt::Long;
 use HTTP::Cookies;
 use HTTP::Request;
@@ -40,6 +40,7 @@ use POSIX qw(ceil floor);
 use Time::HiRes;
 use XML::Simple;
 
+use lib dirname(__FILE__);
 use ksig::conf;
 use ksig::VariableStore;
 

@@ -13,6 +13,7 @@
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 package ksig::conf;
 use common::sense;
+use File::HomeDir;
 use Moose;
 use Moose::Util::TypeConstraints;
 use Readonly;
