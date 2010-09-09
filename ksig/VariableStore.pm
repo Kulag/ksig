@@ -12,18 +12,17 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 package ksig::VariableStore;
-use v5.10;
+require Carp;
 use common::sense;
-use Moose;
-use Perl6::Subs;
 
-has 'db' => (is => 'ro', required => 1);
-
-method BUILD(*@vars) {
-	$self->db->{dbh}->do('CREATE TABLE IF NOT EXISTS variable (`key` text, `val` text);');
+sub new {
+	my $self = bless {}, shift;
+	$self->{db} = shift || Carp::croak('db is required');
+	$self;
 }
 
-method get(Str $key, Str ?$default, Int ?$reset) {
+sub get {
+	my($self, $key, $default, $reset) = @_;
 	if(!exists $self->{cache}->{$key} || $reset) {
 		if(my $r = $self->db->fetch('variable', ['val'], {key => $key}, 1)) {
 			$self->{cache}->{$key} = $r->{val};
@@ -35,10 +34,12 @@ method get(Str $key, Str ?$default, Int ?$reset) {
 	return $self->{cache}->{$key};
 }
 
-method set(Str $key, Str $value) {
+sub set {
+	my($self, $key, $value) = @_;
 	$self->{cache}->{$key} = $value;
 	$self->db->set('variable', {key => $key, val => $value}, {key => $key});
-	return $self;
+	$self;
 }
 
 1;
+
