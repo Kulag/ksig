@@ -1,5 +1,4 @@
 #!/usr/bin/env perl
-package ksig;
 # Copyright (c) 2010, Kulag <g.kulag@gmail.com>
 #
 # Permission to use, copy, modify, and/or distribute this software for any
@@ -13,8 +12,9 @@ package ksig;
 # WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-
+package ksig;
 use 5.010;
+use base qw(POE::Session::Attribute);
 use Carp;
 use common::sense;
 use Data::Dumper;
@@ -32,7 +32,6 @@ use List::Util qw(max min);
 use Log::Any qw($log);
 use Log::Any::Adapter;
 use Log::Dispatch;
-use MooseX::POE;
 use Perl6::Subs;
 use POE qw(Component::Client::HTTP Component::IRC::State Component::IRC::Plugin::AutoJoin Component::IRC::Plugin::Connector Component::IRC::Plugin::NickReclaim);
 use POE::Component::IRC::Common qw(:ALL);
@@ -74,7 +73,12 @@ my $http_session_id = $poe_kernel->ID_session_to_id(
 	)
 );
 
-sub START {
+sub yield :Object {
+	shift;
+	$poe_kernel->yield(@_);
+}
+
+sub _start :Object {
 	my $self = shift;
 	
 	$poe_kernel->sig(INT => 'shutdown');
@@ -124,13 +128,13 @@ sub START {
 	return;
 }
 
-sub STOP {
+sub _stop :Object {
 	my $self = shift;
 	$self->yield('shutdown');
 	return;
 }
 
-event shutdown => sub {
+sub shutdown :Object {
 	my $self = shift;
 	if(!$self->{_shutdown}) {
 		$log->info("ksig is shutting down.");
@@ -142,13 +146,12 @@ event shutdown => sub {
 		for(keys %irc_session_ids) {
 			$poe_kernel->post($_, 'shutdown', $conf->irc_quitmsg);
 		}
-		$conf->write;
 	}
 	return;
-};
+}
 
 # IRC events.
-event irc_join => sub {
+sub irc_join :Object {
 	my($self, $sender, $nick, $channel) = @_[0, SENDER, ARG0, ARG1];
 	my $irc = $sender->get_heap;
 	($nick, my $vhost) = split '!', $nick;
@@ -156,9 +159,9 @@ event irc_join => sub {
 		$log->info("Listening on $channel\@". $irc->server_name);
 	}
 	return;
-};
+}
 
-event irc_public => sub {
+sub irc_public :Object {
 	my($self, $who, $where, $what) = @_[0, ARG0, ARG1, ARG2];
 	my $count = 0;
 	my $nick = (split /!/, $who)[0];
@@ -218,9 +221,9 @@ event irc_public => sub {
 	}
 	$queue->();
 	return;
-};
+}
 
-event irc_msg => sub {
+sub irc_msg :Object {
 	my($self, $sender, $who, $where, $what) = @_[0, SENDER, ARG0, ARG1, ARG2];
 	my $nick = (split /!/, $who)[0];
 	$what = decode_utf8($what);
@@ -290,9 +293,9 @@ event irc_msg => sub {
 		}
 	}
 	return;
-};
+}
 
-event http_process_queue => sub {
+sub http_process_queue :Object {
 	my $self = shift;
 	if(!scalar @{$self->{fetchqueue}} || $self->{_shutdown}) {
 		$self->{downloaderactive} = 0;
@@ -329,7 +332,7 @@ event http_process_queue => sub {
 	return;
 };
 
-event http_stream_q => sub {
+sub http_stream_q :Object {
 	my($self, $req, $qid, $res, $chunk) = ($_[0], @{$_[ARG0]}, @{$_[ARG1]});
 	my $q = $self->{activequeries}->{$qid};
 	if(!defined $q) {
@@ -407,7 +410,7 @@ event http_stream_q => sub {
 	return;
 };
 
-event stats_update => sub {
+sub stats_update :Object {
 	my $self = shift;
 	# First blank the last stats line to prevent trailing garbage.
 	my $out = "\r" . (' ' x $self->{last_stats_line_len}) . "\r";
@@ -820,5 +823,5 @@ sub get_datetime {
 	return $when;
 }
 
-ksig->new;
+ksig->spawn;
 $poe_kernel->run;
