@@ -50,7 +50,7 @@ $|++;
 my $conf = ksig::conf->new_with_options;
 my $db = DBI::SpeedySimple->new($conf->database);
 $db->{dbh}->do("CREATE TABLE IF NOT EXISTS fetchqueue (qid integer primary key autoincrement, `type` text, `id` text, `domain` text, `when` int, `count`, int, `nick` text, `text` text, `desc` text, `uri` text, `from` text, `file_name_ending` text, `file_dir` text, recurse int);");
-my $vs = ksig::VariableStore->new(db => $db);
+my $vs = ksig::VariableStore->new($db);
 
 my $logger;
 my %irc_session_ids;
