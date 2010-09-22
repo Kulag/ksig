@@ -1,0 +1,65 @@
+# This file is completely optional.
+# ksig will run just fine at downloading normal images without it.
+# Some features like danbooru or pixiv require usernames and passwords to be set in here.
+# Uncomment an option to enable it. (I hope you knew that.)
+
+# This file will be automatically loaded from ~/.config/ksig/ksig.cfg if it exists.
+# Alternatively, you can place it wherever you like,
+# and start ksig with the --configfile <filename> option instead.
+
+
+# By default cookies are stored here.
+# cookies_file = ~/.cache/ksig/cookies
+
+# You must set both danbooru_username and danbooru_password
+# in order to fetch images from danbooru.donmai.us
+#
+# danbooru_username = 
+# danbooru_password = 
+
+# By default, ksig creates a sqlite database in ~/.local/share/db
+# You could make it connect to mysql/postgres/anything DBI supports if you want.
+# database = dbi:SQLite:~/.local/share/db
+
+# By default, ksig will prepend the date to the filenames it creates.
+# Set to 1 to set the modified time on the file instead.
+# file_timestamps_use_mtime = 0
+
+# The number of queries to run at once.
+# http_concurrent_requests = 5
+
+# You must set pixiv_username and pixiv_password in order to use any pixiv features other than non-R18 images.
+#
+# pixiv_username = 
+# pixiv_password = 
+
+# By default, ksig will immediately stop parsing any line in a public channel that contains the word "!skip".
+# Set to 0 to disable.
+# irc_ignore_skipped_urls = 1
+
+# The nick ksig will try to use on IRC. You should probably change this.
+# irc_nick = ksig
+
+# The message to send when ksig performs a shutdown command.
+# irc_quitmsg = ksig is shutting down.
+
+# You can log messages to a file.
+# log_file = 
+
+# Where ksig should download urls to.
+# output_folder = ~/ksig
+
+# Any message more important than this will be displayed in the terminal.
+# screen_output_level = info
+
+# The amount of time (in milliseconds) to use as a window for determining how fast a transfer is going.
+# stats_speed_average_window = 4000
+
+# How often to update the status line in the terminal.
+# stats_line_update_frequency = 0.1
+
+# Set to something else so your files don't get stuck in brittime.
+# timezone = UTC
+
+# Set to 1 to make Windows not shit bricks at your infinitely superior filenames.
+# use_windows_compatible_filenames = 0

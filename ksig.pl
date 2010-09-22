@@ -1,17 +1,4 @@
 #!/usr/bin/env perl
-# Copyright (c) 2010, Kulag <g.kulag@gmail.com>
-#
-# Permission to use, copy, modify, and/or distribute this software for any
-# purpose with or without fee is hereby granted, provided that the above
-# copyright notice and this permission notice appear in all copies.
-#
-# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
-# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
-# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
-# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
-# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
-# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
-# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 package ksig;
 use 5.010;
 use base qw(POE::Session::Attribute);
@@ -24,7 +11,9 @@ use Digest::SHA1 qw(sha1_hex);
 use Encode;
 use File::Path qw(make_path);
 use File::Basename 'dirname';
-use Getopt::Long;
+use File::BaseDir;
+use File::HomeDir;
+use Getopt::Euclid;
 use HTTP::Cookies;
 use HTTP::Request;
 use HTTP::Request::Common;
@@ -42,11 +31,42 @@ use XML::Simple;
 use lib dirname(__FILE__);
 use ksig::conf;
 use ksig::VariableStore;
+use File::HomeDir;
 
 binmode(STDOUT, ":utf8");
 $|++;
 
-my $conf = ksig::conf->new_with_options;
+my $appdir => File::HomeDir->my_home . '/.ksig';
+mkdir $appdir if !-d $appdir;
+
+my $conf = ksig::conf->new({
+	cookies_file => File::BaseDir->cache_home('ksig', 'cookies'),
+	danbooru_username => undef, # ksig cannot download images from danbooru without this.
+	danbooru_password => undef,
+	database => 'dbi:SQLite:' . File::BaseDir->data_home('ksig', 'db'),
+	file_timestamps_use_mtime => 0,
+	http_concurrent_requests => 5,
+	pixiv_username => undef, # Without this, ksig can only download basic image links. No manga, R-18 content, or any of the other pages are supported.
+	pixiv_password => undef,
+	irc_admins => [], # IRC masks of users allowed to send commands to the bot.
+	irc_ignore_skipped_urls => 1, # Ignore urls preceded by a !skip on an IRC line. Default: True.
+	irc_nick => 'ksig',
+	irc_quitmsg => 'ksig is shutting down.',
+	irc_channels => {}, # The IRC servers to connect to, along with the channels to join with their keys. Must be of the form {"irc.example.com" => {"#channel[ <key>]"}}.
+	log_file => undef,
+	output_folder => File::HomeDir->my_home . '/ksig',
+	screen_output_level => 'info',
+	stats_speed_average_window => 4000,
+	stats_update_frequency => 0.1,
+	timezone => 'UTC',
+	use_windows_compatible_filenames => 0,
+});
+if(!-d File::BaseDir->cache_home('ksig')) {
+	mkdir File::BaseDir->cache_home('ksig')
+}
+if(!-d File::BaseDir->data_home('ksig')) {
+	mkdir File::BaseDir->data_home('ksig')
+}
 my $db = DBI::SpeedySimple->new($conf->database);
 $db->{dbh}->do("CREATE TABLE IF NOT EXISTS fetchqueue (qid integer primary key autoincrement, `type` text, `id` text, `domain` text, `when` int, `count`, int, `nick` text, `text` text, `desc` text, `uri` text, `from` text, `file_name_ending` text, `file_dir` text, recurse int);");
 my $vs = ksig::VariableStore->new($db);
@@ -91,7 +111,7 @@ sub _start :Object {
 	$self->{statsactive} = 0;
 	
 	$logger = Log::Dispatch->new(
-		outputs => ($conf->has_log_file ? [['File', min_level => 'debug', filename => $conf->log_file, newline => 1]] : []),
+		outputs => ($conf->log_file ? [['File', min_level => 'debug', filename => $conf->log_file, newline => 1]] : []),
 		callbacks => sub {
 			my %p = @_;
 			if($self->{statsactive}) {
@@ -105,14 +125,25 @@ sub _start :Object {
 	);
 	Log::Any::Adapter->set('Dispatch', dispatcher => $logger);
 	
-	my %irc_servers = %{$conf->irc_servers};
-	for my $url (keys %irc_servers) {
+	my %irc_channels = %{$conf->irc_channels};
+	for my $url (keys %irc_channels) {
 		my $irc = POE::Component::IRC::State->spawn(
 			Nick => $conf->irc_nick,
 			Server => $url,
 		);
 		
-		$irc->plugin_add('AutoJoin', POE::Component::IRC::Plugin::AutoJoin->new(Channels => $irc_servers{$url}, RejoinOnKick => 1, Retry_when_banned => 1));
+		my %channels;
+		for(ref $irc_channels{$url} eq 'ARRAY' ? @{$irc_channels{$url}} : $irc_channels{$url}) {
+			if(/ /) {
+				my($a, $b) = split / /, $_;
+				$channels{$a} = $b;
+			}
+			else {
+				$channels{$_} = '';
+			}
+		}
+		
+		$irc->plugin_add('AutoJoin', POE::Component::IRC::Plugin::AutoJoin->new(Channels => \%channels, RejoinOnKick => 1, Retry_when_banned => 1));
 		$irc->plugin_add('Connector', POE::Component::IRC::Plugin::Connector->new(servers => \($url)));
 		$irc->plugin_add('NickReclaim', POE::Component::IRC::Plugin::NickReclaim->new());
 		
@@ -807,7 +838,7 @@ sub make_file_name {
 
 	push @fn, $q->{file_name_ending};
 	my $filename = join(' ', @fn);
-	if($conf->windows_compatible_filenames) {
+	if($conf->use_windows_compatible_filenames) {
 		$filename =~ tr!\?"/\\<>\|:\*!？”∕￥＜＞｜：＊!;
 	}
 	else {
@@ -825,3 +856,135 @@ sub get_datetime {
 
 ksig->spawn;
 $poe_kernel->run;
+
+__END__
+=head1 NAME
+
+ksig.pl - A bot to grab images from IRC
+
+=head1 USAGE
+
+ksig.pl [options]
+
+=head1 OPTIONS
+
+=over
+
+=item --conf[ig[file]] [=] <file>
+
+File to read configuration from. Default: ~/.config/ksig/ksig.cfg
+
+=for Euclid
+	file.type: readable
+
+=item --cookies-file [=] <file>
+
+File to store cookies in. Default: ~/.cache/ksig/cookies
+
+=for Euclid
+	file.type: writeable
+
+=item --database [=] <str>
+
+DBI connection string. Default: dbi:SQLite:~/.local/share/ksig/db.
+
+=for Euclid
+	str.type: str
+
+=item --file-timestamps-[dont-]use-mtime
+
+Enabling this sets the modification time on the file to the time the event that caused it to be downloaded happened instead of putting it in the filename.
+
+=for Euclid
+	false: --file-timestamps-dont-use-mtime
+
+=item --http-concurrent-requests [=] <int>
+
+The number of requests the http module may execute concurrently. Default: 5.
+Note: This default was chosen not for performance reasons, but simply because that was the number of requests that fit on one line of my terminal. YMMV.
+
+=for Euclid
+	int.type: 0+int
+
+=item --irc-nick [=] <str>
+
+The nick to try to use on IRC. Default: ksig.
+
+=for Euclid
+	str.type: str
+
+=item --irc-quitmsg [=] <str>
+
+The message to send to the IRC server when quitting.
+Default: ksig is shutting down.
+
+=for Euclid
+	str.type: str
+
+=item --log-file [=] <str>
+
+Where to log stuff.
+
+=for Euclid
+	str.type: str
+
+=item --out[put[-folder]] [=] <filename>
+
+The folder to put downloaded files in. Default: ~/ksig
+
+=for Euclid
+	filename.type: writeable
+
+=item --screen-output-level [=] <level>
+
+How detailed information to output to the terminal. Default: info.
+Options: debug info notice warning error critical alert emergency.
+
+=for Euclid:
+	level.type: /(debug|info|notice|warning|error|critical|alert|emergency)/
+
+=item --stats-speed-average-window [=] <milliseconds>
+
+How large a window (in milliseconds) to use for the current speed calculation.
+
+=for Euclid
+	milliseconds.type: 0+i
+
+=item --stats-update-frequency [=] <seconds>
+
+How often (in seconds) to update the stats line at the bottom of the terminal.
+
+=for Euclid
+	seconds.type: 0+num
+
+=item --timezone [=] <timezone>
+
+The timezone to use for dates in the downloaded files' filenames.
+
+=for Euclid
+	timezone.type: str
+
+=item --[dont-[use-]]windows-compatible-filenames
+
+Default: false. Set to true to make Windows not shit bricks.
+
+=for Euclid
+	false: --dont-use-windows-compatible-filenames
+
+=back
+
+=head1 COPYRIGHT
+
+Copyright (c) 2010, Kulag <g.kulag@gmail.com>
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.

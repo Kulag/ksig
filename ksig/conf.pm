@@ -13,34 +13,80 @@
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 package ksig::conf;
 use common::sense;
-use File::HomeDir;
-use Moose;
-use Moose::Util::TypeConstraints;
-use Readonly;
-with qw(MooseX::Getopt MooseX::SimpleConfig);
+use Config::Std;
+use File::BaseDir;
+use List::MoreUtils qw(zip);
+use Perl6::Caller;
 
-Readonly my $appdir => File::HomeDir->my_home . '/.ksig';
-mkdir $appdir if !-d $appdir;
+sub new {
+	my($class, $conf, %opts) = @_;
+	my $package = caller->package;
+	my $self = bless $conf, $class;
+	
+	my $configfile = delete $self->{configfile};
+	tie $self->{configfile}, __PACKAGE__, sub {
+		if(@_ && ($configfile = shift) && -f $configfile) {
+			read_config $configfile => my $file_conf;
+			my $globals = delete $file_conf->{''};
+			my $chain_configfile = delete $globals->{configfile};
+			my @keys = keys %$globals;
+			my @vals = map { /^\d+$/ ? int($_) : ($_ eq 'undef' ? undef : $_) } values %$globals;
+			my %new = zip(@keys, @vals);
+			for(@keys) {
+				$self->{$_} = $new{$_};
+			}
+			for my $section (keys %$file_conf) {
+				my @keys = keys %{$file_conf->{$section}};
+				my @vals = map { /^\d+$/ ? int($_) : ($_ eq 'undef' ? undef : $_) } values %{$file_conf->{$section}};
+				if(defined $opts{sections_under}) {
+					my %new = (%{$self->{$opts{sections_under}}->{$section}}, zip(@keys, @vals));
+					$self->{$opts{sections_under}}->{$section} = \%new;
+				}
+				else {
+					my %new = (%{$self->{$section}}, zip(@keys, @vals));
+					$self->{$section} = \%new;
+				}
+			}
+			if($opts{chainload_configfiles} && $chain_configfile) {
+				$self->{configfile} = $chain_configfile;
+			}
+		}
+		$configfile;
+	};
+	
+	$self->{configfile} = $configfile || File::BaseDir->config_home($package, "$package.cfg");
+	local %ARGV = %ARGV;
+	if(my $configfile = delete $ARGV{'--configfile'}) {
+		$self->{configfile} = $configfile;
+	}
+	for(keys %ARGV) {
+		$self->{trname($_)} = $ARGV{$_};
+	}
+	
+	for my $field (keys %$self) {
+		*{$field} = sub :lvalue {
+			my $self = shift;
+			$self->{$field} = shift if @_;
+			$self->{$field};
+		};
+	}
+	$self;
+}
 
-has '+configfile' => (default => "$appdir/config.yml", documentation => 'Default: ~/.ksig/config.yml');
+sub TIESCALAR {
+	my($package, $coderef) = @_;
+	die "Not a coderef: $coderef" unless ref($coderef) eq 'CODE';
+	return bless $coderef, $package;
+}
 
-has 'cookies_file' => (is => 'rw', isa => 'Str', required => 1, default => "$appdir/cookies", documentation => 'Path to the cookies file. Default: ~/cookies.');
-has 'database' => (is => 'rw', isa => 'Str', required => 1, default => "dbi:SQLite:$appdir/db", documentation => 'DBI path. Default: dbi:SQLite:~/.ksig/db.');
-has [qw(danbooru_password danbooru_username)] => (is => 'rw', isa => 'Str', lazy_build => 1, documentation => 'Username and password for Danbooru. ksig cannot download images from danbooru without this.');
-has 'file_timestamps_use_mtime' => (is => 'rw', isa => 'Bool', required => 1, default => 0, documentation => 'Enabling this sets the modification time on the file to the time the event that caused it to be downloaded happened instead of putting it in the filename.');
-has [qw(pixiv_password pixiv_username)] => (is => 'rw', isa => 'Str', lazy_build => 1, documentation => 'Username and password for pixiv. Without this, ksig can only download basic image links, no manga, R-18 content, or any of the other pages are supported.');
-has 'http_concurrent_requests' => (is => 'rw', isa => 'Int', required => 1, default => 5, documentation => 'The number of requests the http module may execute concurrently. Default: 5. Note: This default was chosen not for performance reasons, but simply because that was the number of requests that fit on one line of my terminal in the status line. YMMV.');
-has 'irc_admins' => (is => 'rw', isa => 'ArrayRef', required => 1, default => sub { [] }, documentation => 'IRC masks of users allowed to send commands to the bot.');
-has 'irc_ignore_skipped_urls' => (is => 'rw', isa => 'Bool', required => 1, default => 1, documentation => 'Ignore urls preceded by a !skip on an IRC line. Default: True.');
-has 'irc_nick' => (is => 'rw', isa => 'Str', required => 1, default => 'ksig', documentation => 'The nick to try to use on IRC. Default: ksig.');
-has 'irc_quitmsg' => (is => 'rw', isa => 'Str', required => 1, default => 'ksig is shutting down.', documentation => 'The message to send to the IRC server when quitting. Default: ksig is shutting down.');
-has 'irc_servers' => (is => 'rw', isa => 'HashRef[HashRef]', required => 1, default => sub { {} }, documentation => 'The IRC servers to connect to, along with the channels to join with their keys. Must be of the form {"irc.example.com" => {"#channel" => "key"}}. Key must be "" if there is no key.');
-has 'log_file' => (is => 'rw', isa => 'Str', predicate => 'has_log_file', documentation => 'Where to log stuff.');
-has 'output_folder' => (is => 'rw', isa => 'Str', required => 1, default => File::HomeDir->my_home . '/ksig', documentation => 'The folder to put downloaded files in. Default: ~/ksig');
-has 'screen_output_level' => (is => 'rw', isa => 'Str', required => 1, default => 'info', documentation => 'How detailed information to output to the terminal. Default: info. Options: debug info notice warning error critical alert emergency.');
-has 'stats_speed_average_window' => (is => 'rw', isa => 'Int', required => 1, default => 4000, documentation => 'How large a window (in milliseconds) to use for the current speed calculation.');
-has 'stats_update_frequency' => (is => 'rw', isa => 'Num', required => 1, default => 0.1, documentation => 'How often (in seconds) to update the stats line at the bottom of the terminal.');
-has 'timezone' => (is => 'rw', isa => 'Str', required => 1, default => 'UTC', documentation => "The timezone to use for dates in the downloaded files' filenames.");
-has 'windows_compatible_filenames' => (is => 'rw', isa => 'Bool', required => 1, default => 0, documentation => 'Default: false. Set to true to make Windows not shit bricks.');
+sub STORE { my $tied = shift; $tied->(@_); }
+sub FETCH { shift->(); }
+
+sub trname {
+	shift;
+	s/^-+//;
+	s/-/_/g;
+	return $_;
+}
 
 1;
