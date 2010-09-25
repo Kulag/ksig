@@ -9,10 +9,10 @@ use DateTime;
 use DBI::SpeedySimple;
 use Digest::SHA1 qw(sha1_hex);
 use Encode;
-use File::Path qw(make_path);
-use File::Basename 'dirname';
 use File::BaseDir;
+use File::Basename 'dirname';
 use File::HomeDir;
+use File::Path qw(make_path);
 use Getopt::Euclid;
 use HTTP::Cookies;
 use HTTP::Request;
@@ -31,12 +31,11 @@ use XML::Simple;
 use lib dirname(__FILE__);
 use ksig::conf;
 use ksig::VariableStore;
-use File::HomeDir;
 
 binmode(STDOUT, ":utf8");
 $|++;
 
-my $appdir => File::HomeDir->my_home . '/.ksig';
+my $appdir = File::HomeDir->my_home . '/.ksig';
 mkdir $appdir if !-d $appdir;
 
 my $conf = ksig::conf->new({

@@ -1,5 +1,5 @@
-# This file is completely optional.
-# ksig will run just fine at downloading normal images without it.
+# This file is completely optional except for the [irc_channels] section.
+# ksig will run just fine at downloading normal images without any additional configuration.
 # Some features like danbooru or pixiv require usernames and passwords to be set in here.
 # Uncomment an option to enable it. (I hope you knew that.)
 
@@ -63,3 +63,9 @@
 
 # Set to 1 to make Windows not shit bricks at your infinitely superior filenames.
 # use_windows_compatible_filenames = 0
+
+[irc_channels]
+# Specify what irc networks and channels to join like so:
+# irc.example.net = #channel
+# irc.example.net = #privatechannel key
+# irc.otherserver.net = #channel
