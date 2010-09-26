@@ -565,7 +565,9 @@ method download_file($q) {
 	$poe_kernel->post('http', 'request', 'http_stream_q', $r, $q->{qid});
 	return 1;
 }
-method handle_file_completion($q) {}
+
+# This is required by the current design, ksig will crash if it is not present.
+sub handle_file_completion {}
 
 method download_pixivlogin($q) {
 	$poe_kernel->post('http', 'request', 'http_stream_q', POST('http://www.pixiv.net/index.php', Content => {mode => 'login', pixiv_id => $conf->pixiv_username, pass => $conf->pixiv_password, skip => 1}), $q->{qid});
