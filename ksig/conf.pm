@@ -22,8 +22,10 @@ sub new {
 	my($class, $conf, %opts) = @_;
 	my $package = caller->package;
 	my $self = bless $conf, $class;
-	
+
 	my $configfile = delete $self->{configfile};
+
+	# When the configfile key is set, magically load configuration from that filename.
 	tie $self->{configfile}, __PACKAGE__, sub {
 		if(@_ && ($configfile = shift) && -f $configfile) {
 			read_config $configfile => my $file_conf;
@@ -53,16 +55,24 @@ sub new {
 		}
 		$configfile;
 	};
-	
-	$self->{configfile} = $configfile || File::BaseDir->config_home($package, "$package.cfg");
-	local %ARGV = %ARGV;
-	if(my $configfile = delete $ARGV{'--configfile'}) {
-		$self->{configfile} = $configfile;
+
+	local %ARGV = %ARGV; # Because --configfile gets deleted out of this.
+
+	# Load one of the default config files unless the file was specified on the commandline.
+	# Used cmd_ because I'm not entirely sure if the my scoping extends into the else block.
+	if(my $cmd_configfile = delete $ARGV{'--configfile'}) {
+		$self->{configfile} = $cmd_configfile;
 	}
+	else {
+		$self->{configfile} = $configfile || File::BaseDir->config_home($package, "$package.cfg");
+	}
+
+	# Set command line options.
 	for(keys %ARGV) {
 		$self->{trname($_)} = $ARGV{$_};
 	}
-	
+
+	# Generate lv accessors for each config value.
 	for my $field (keys %$self) {
 		*{$field} = sub :lvalue {
 			my $self = shift;
@@ -70,6 +80,7 @@ sub new {
 			$self->{$field};
 		};
 	}
+
 	$self;
 }
 
