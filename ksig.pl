@@ -20,6 +20,7 @@ use HTTP::Request::Common;
 use List::Util qw(max min);
 use Log::Any qw($log);
 use Log::Any::Adapter;
+use Log::Any::Adapter::Dispatch;
 use Log::Dispatch;
 use Perl6::Subs;
 use POE qw(Component::Client::HTTP Component::IRC::State Component::IRC::Plugin::AutoJoin Component::IRC::Plugin::Connector Component::IRC::Plugin::NickReclaim);

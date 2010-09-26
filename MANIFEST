@@ -1,4 +1,7 @@
 Build.PL
+ksig.cfg.example
 ksig.pl
+ksig/conf.pm
+ksig/VariableStore.pm
 MANIFEST			This list of files
 META.yml

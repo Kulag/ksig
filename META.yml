@@ -4,8 +4,7 @@ author:
   - Kulag
 configure_requires:
   Module::Build: 0.36
-dynamic_config: 0
-generated_by: 'Module::Build version 0.3603'
+generated_by: 'Module::Build version 0.3607'
 license: isc
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -13,28 +12,40 @@ meta-spec:
 name: ksig
 requires:
   Carp: 0
-  Config::YAML: 0
+  Config::Std: 0
   DBI::SpeedySimple: 0
   Data::Dumper: 0
   DateTime: 0
   Digest::SHA1: 0
   Encode: 0
+  File::BaseDir: 0
+  File::Basename: 0
   File::HomeDir: 0
   File::Path: 0
+  Getopt::Euclid: 0
   HTTP::Cookies: 0
   HTTP::Request: 0
   HTTP::Request::Common: 0
+  List::MoreUtils: 0
   List::Util: 0
+  Log::Any: 0
+  Log::Any::Adapter::Dispatch: 0
+  Log::Dispatch: 0
   POE: 0
   POE::Component::Client::HTTP: 0
   POE::Component::IRC::Plugin::AutoJoin: 0
   POE::Component::IRC::Plugin::Connector: 0
   POE::Component::IRC::Plugin::NickReclaim: 0
   POE::Component::IRC::State: 0
+  POE::Session::Attribute: 0
   POSIX: 0
+  Perl6::Caller: 0
+  Perl6::Subs: 0
   Readonly: 0
   Time::HiRes: 0
   XML::Simple: 0
   common::sense: 0
   perl: 5.010
+resources:
+  license: http://opensource.org/licenses/isc-license.txt
 version: 1
