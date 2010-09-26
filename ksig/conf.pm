@@ -58,12 +58,13 @@ sub new {
 
 	local %ARGV = %ARGV; # Because --configfile gets deleted out of this.
 
-	# Load one of the default config files unless the file was specified on the commandline.
 	# Used cmd_ because I'm not entirely sure if the my scoping extends into the else block.
+	# Delete --configfile out of ARGV so the file doesn't get loaded twice and so commandline options can override the config file.
 	if(my $cmd_configfile = delete $ARGV{'--configfile'}) {
 		$self->{configfile} = $cmd_configfile;
 	}
 	else {
+		# Load one of the default config files.
 		$self->{configfile} = $configfile || File::BaseDir->config_home($package, "$package.cfg");
 	}
 
