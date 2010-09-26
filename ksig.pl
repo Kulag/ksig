@@ -666,23 +666,25 @@ method handle_pixivmanga_completion($q) {
 		close F;
 		croak "pixivmanga regex pagecount failed on $q->{id}";
 	}
-	
-	my @imageurls;
-	while($buf =~ m!<img src="http://(img\d+)\.pixiv\.net/img/(.*?)/$q->{id}_p(\d+)\.(\w+)">!g) {
-		push @imageurls, [$1, $2, $3, $4];
+
+	my($imgserver, $username, $file_ext);
+	if($buf =~ m!<img src="http://img(\d+)\.pixiv\.net/img/(.*?)/$q->{id}_p\d+\.(\w+)">!) {
+		($imgserver, $username, $file_ext) = ($1, $2, $3);
 	}
-	if(scalar(@imageurls) != $pagecount) {
-		open F, ">pixivmangaregex-imageurls-failed-$q->{id}.html";
-		print F encode_utf8($buf);
-		close F;
-		croak "pixivmanga regex imageurls failed on $q->{id}";
+	else {
+		open my $f, ">pixivmangaregex-imgurl-failed-$q->{id}.html";
+		print $f encode_utf8($buf);
+		close $f;
+		croak "pixivmanga regex imgurl failed on $q->{id}";
 	}
-	
-	for my $imageurl (@imageurls) {
+
+	# Assumes that the file extension is the same for all the pages.
+	# Might turn out to be a problem, but it's simpler than loading and parsing each page.
+	for(0..($pagecount - 1)) {
 		$self->requeue($q, {
 			type => 'file',
-			uri => "http://$imageurl->[0].pixiv.net/img/$imageurl->[1]/$q->{id}_p$imageurl->[2].$imageurl->[3]",
-			file_name_ending => "pixiv $q->{id} $title P$imageurl->[2].$imageurl->[3]",
+			uri => sprintf('http://img%d.pixiv.net/img/%s/%d_p%d.%s', $imgserver, $username, $q->{id}, $_, $file_ext),
+			file_name_ending => sprintf('pixiv %d %s P%d.%s', $q->{id}, $title, $_, $file_ext),
 		});
 	}
 }
