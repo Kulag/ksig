@@ -31,6 +31,7 @@ use XML::Simple;
 
 use lib dirname(__FILE__);
 use ksig::conf;
+use ksig::Log::Dispatch::Terminal;
 use ksig::VariableStore;
 
 binmode(STDOUT, ":utf8");
@@ -105,24 +106,17 @@ sub _start :Object {
 	
 	$self->{activequeries} = {};
 	$self->{downloaderactive} = 0;
-	$self->{informqueue} = [];
 	$self->{fetchqueue} = $db->{dbh}->selectcol_arrayref('SELECT qid FROM fetchqueue');
 	$self->{last_stats_line_len} = 0;
 	$self->{statsactive} = 0;
-	
-	$logger = Log::Dispatch->new(
-		outputs => ($conf->log_file ? [['File', min_level => 'debug', filename => $conf->log_file, newline => 1]] : []),
-		callbacks => sub {
-			my %p = @_;
-			if($self->{statsactive}) {
-				push @{$self->{informqueue}}, $p{message};
-			}
-			else {
-				say $p{message};
-			}
-			return $p{message};
-		},
-	);
+
+	# Perl can't find Log::Dispatch::File if we try to use it normally.
+	$logger = Log::Dispatch->new(outputs => $conf->log_file ? [['File', min_level => 'debug', filename => $conf->log_file, newline => 1]] : []);
+	$logger->add($self->{term_logger} = ksig::Log::Dispatch::Terminal->new(
+		name => 'terminal',
+		min_level => $conf->screen_output_level,
+		statsactive => \$self->{statsactive}
+	));
 	Log::Any::Adapter->set('Dispatch', dispatcher => $logger);
 	
 	my %irc_channels = %{$conf->irc_channels};
@@ -447,10 +441,7 @@ sub stats_update :Object {
 	my $out = "\r" . (' ' x $self->{last_stats_line_len}) . "\r";
 	
 	# Add any new inform lines since the last update.
-	if(@{$self->{informqueue}}) {
-		$out .= join("\n", @{$self->{informqueue}}) . "\n";
-		$self->{informqueue} = [];
-	}
+	$out .= $self->{term_logger}->buffer_get_clean;
 	
 	# Stop updating if there's nothing going on.
 	if(!scalar(keys %{$self->{activequeries}})) {
