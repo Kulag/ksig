@@ -11,6 +11,7 @@ my %module_build_args = (
 	'pm_files'      => {
 		'ksig/conf.pm' => 'lib/ksig/conf.pm',
 		'ksig/VariableStore.pm' => 'lib/ksig/VariableStore.pm',
+		'ksig/Log/Dispatch/Terminal.pm' => 'lib/ksig/Log/Dispatch/Terminal.pm',
 	},
 	'license'       => 'isc',
 	'dist_name'     => 'ksig',
