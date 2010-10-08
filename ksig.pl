@@ -499,7 +499,6 @@ sub requeue {
 }
 
 method download_finished($q) {
-	$self->clear_download($q);
 	my $transfer_timedelta = Time::HiRes::time() - $q->{starttime};
 	$log->notice(sprintf("Finished #%d. %s transferred in %s (avg %s/s).",
 		$q->{qid},
@@ -508,16 +507,11 @@ method download_finished($q) {
 		fmt_size($q->{completed_length} / $transfer_timedelta)));
 	my $handler = "handle_$q->{type}_completion";
 	$self->$handler($q);
+	$self->clear_download($q);
 	return;
 }
 
 method clear_download($q) {
-	if($q->{outfh}) {
-		if($conf->file_timestamps_use_mtime) {
-			utime(time(), $q->{when}, $q->{outfh});
-		}
-		close $q->{outfh};
-	}
 	delete $self->{activequeries}->{$q->{qid}};
 	$db->remove('fetchqueue', {qid => $q->{qid}});
 	return;
@@ -544,8 +538,12 @@ method download_file($q) {
 	return 1;
 }
 
-# This is required by the current design, ksig will crash if it is not present.
-sub handle_file_completion {}
+method handle_file_completion($q) {
+	if($conf->file_timestamps_use_mtime) {
+		utime(time(), $q->{when}, $q->{outfh});
+	}
+	close $q->{outfh};
+}
 
 method download_pixivlogin($q) {
 	$poe_kernel->post('http', 'request', 'http_stream_q', POST('http://www.pixiv.net/index.php', Content => {mode => 'login', pixiv_id => $conf->pixiv_username, pass => $conf->pixiv_password, skip => 1}), $q->{qid});
