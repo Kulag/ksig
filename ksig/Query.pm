@@ -1,5 +1,6 @@
 package ksig::Query; {
 	use base qw(Class::Accessor);
+	use common::sense;
 	use Log::Any qw($log);
 	__PACKAGE__->mk_accessors(qw(qid type id from nick when text count desc file_dir uri file_name_ending domain));
 	
@@ -27,16 +28,12 @@ package ksig::Query; {
 	
 	sub save {
 		my $self = shift;
-		for(qw(type id from nick when text count desc file_dir uri file_name_ending domain)) {
-			if(!defined $self->$_) {
-				$self->$_('');
-			}
-		}
+		my $save = {map { $_, $self->{$_} } grep { $self->{$_} } qw(type id from nick when text count desc file_dir uri file_name_ending domain)};
 		if($self->qid) {
-			ksig->db->update('fetchqueue', $self, {qid => $self->qid});
+			ksig->db->update('fetchqueue', $save, {qid => $self->qid});
 		}
 		else {
-			ksig->db->insert('fetchqueue', $self);
+			ksig->db->insert('fetchqueue', $save);
 			$self->qid(ksig->db->{dbh}->last_insert_id('', '', 'fetchqueue', 'qid'));
 		}
 		if($log->is_debug) {
