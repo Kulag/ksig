@@ -2,8 +2,8 @@ package ksig::Query; {
 	use base qw(Class::Accessor);
 	use common::sense;
 	use Log::Any qw($log);
-	__PACKAGE__->mk_accessors(qw(qid type id from nick when text count desc file_dir uri file_name_ending domain));
-	
+	__PACKAGE__->mk_accessors(qw(qid type id from nick when text count desc file_dir uri file_name_ending domain app));
+
 	sub new {
 		my $class = shift;
 		my $self = bless {@_}, $class;
@@ -48,6 +48,25 @@ package ksig::Query; {
 		if($log->is_debug) {
 			$log->debug('Saved Query #' . join(':', grep { defined } $self->qid, $self->type, $self->id, $self->uri));
 		}
+		$self;
+	}
+
+	sub remove {
+		my $self = shift;
+		ksig->db->remove('fetchqueue', {qid => $self->qid});
+		$self;
+	}
+
+	sub execute {
+		my $self = shift;
+		my $handler = 'ksig::download_' . $self->type;
+		return &$handler($self->app, $self);
+	}
+
+	sub handle_completion {
+		my $self = shift;
+		my $handler = 'ksig::handle_' . $self->type . '_completion';
+		&$handler($self->app, $self);
 		$self;
 	}
 }

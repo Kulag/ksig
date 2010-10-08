@@ -325,8 +325,8 @@ sub http_process_queue :Object {
 	
 	if(scalar(keys %{$self->{activequeries}}) < $conf->http_concurrent_requests) {
 		my $q = ksig::Query::load(shift(@{$self->{fetchqueue}}));
-		my $downloader = "download_$q->{type}";
-		if($self->$downloader($q)) {
+		$q->app($self);
+		if($q->execute) {
 			if($log->is_info) {
 				$log->info('Get #' . join(':', grep { defined } $q->qid, $q->type, $q->id, $q->uri));
 			}
@@ -502,16 +502,11 @@ method download_finished($q) {
 		fmt_size($q->{completed_length} - $q->{startpos}),
 		fmt_timedelta($transfer_timedelta),
 		fmt_size($q->{completed_length} / $transfer_timedelta)));
-	my $handler = "handle_$q->{type}_completion";
-	$self->$handler($q);
-	$self->clear_download($q);
-	return;
+	delete shift->{activequeries}->{$q->handle_completion->remove->qid};
 }
 
-method clear_download($q) {
-	delete $self->{activequeries}->{$q->{qid}};
-	$db->remove('fetchqueue', {qid => $q->{qid}});
-	return;
+sub clear_download {
+	delete shift->{activequeries}->{shift->remove->qid};
 }
 
 # Downloaders and completion handlers.
