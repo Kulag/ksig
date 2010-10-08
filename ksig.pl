@@ -659,7 +659,7 @@ method handle_pixivmanga_completion($q) {
 	}
 
 	my($imgserver, $username, $file_ext);
-	if($buf =~ m!<img src="http://img(\d+)\.pixiv\.net/img/(.*?)/$q->{id}_p\d+\.(\w+)">!) {
+	if($buf =~ m!<img src="http://(\w+)\.pixiv\.net/img/(.*?)/$q->{id}_p\d+\.(\w+)">!) {
 		($imgserver, $username, $file_ext) = ($1, $2, $3);
 	}
 	else {
@@ -674,7 +674,7 @@ method handle_pixivmanga_completion($q) {
 	for(0..($pagecount - 1)) {
 		$self->requeue($q, {
 			type => 'file',
-			uri => sprintf('http://img%d.pixiv.net/img/%s/%d_p%d.%s', $imgserver, $username, $q->{id}, $_, $file_ext),
+			uri => sprintf('http://%s.pixiv.net/img/%s/%d_p%d.%s', $imgserver, $username, $q->{id}, $_, $file_ext),
 			file_name_ending => sprintf('pixiv %d %s P%d.%s', $q->{id}, $title, $_, $file_ext),
 		});
 	}
