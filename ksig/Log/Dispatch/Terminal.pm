@@ -15,7 +15,7 @@ package ksig::Log::Dispatch::Terminal; {
 	sub log_message {
 		my($self, %p) = @_;
 		if(${$self->{statusline_active}}) {
-			$self->{buffer} .= $p{message} . "buffer\n";
+			$self->{buffer} .= $p{message} . "\n";
 		}
 		else {
 			say $p{message};
@@ -24,7 +24,7 @@ package ksig::Log::Dispatch::Terminal; {
 
 	sub buffer_get_clean {
 		my $self = shift;
-		if(@{$self->{buffer}}) {
+		if($self->{buffer}) {
 			my $r = $self->{buffer};
 			$self->{buffer} = '';
 			return $r;
