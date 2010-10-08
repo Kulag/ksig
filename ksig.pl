@@ -821,7 +821,7 @@ sub make_file_name {
 	push @fn, $q->{file_name_ending};
 	my $filename = join(' ', @fn);
 	if($conf->use_windows_compatible_filenames) {
-		$filename =~ tr!\?"/\\<>\|:\*!？”∕￥＜＞｜：＊!;
+		$filename =~ tr!\?"/\\<>\|:\*!？”∕＼＜＞｜：＊!;
 	}
 	else {
 		$filename =~ s!/!∕!g;
