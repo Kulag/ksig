@@ -20,7 +20,16 @@ package ksig::Query; {
 		my $self = shift;
 		ksig::Query->new(map { $_, $self->{$_} } qw(type id from nick when text count desc file_dir uri file_name_ending domain));
 	}
-	
+
+	sub make_child {
+		my($self, $new_data) = (shift, {@_});
+		my $q = ksig::Query::clone($self);
+		for(keys %$new_data) {
+			$q->$_($new_data->{$_}); 
+		}
+		$q;
+	}
+
 	sub load {
 		my $q = ksig->db->fetch('fetchqueue', ['*'], {qid => shift}, 1);
 		return ksig::Query->new(%$q);

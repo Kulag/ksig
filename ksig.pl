@@ -491,11 +491,8 @@ sub queue {
 }
 
 sub requeue {
-	my($self, $q, $newq) = (shift, ksig::Query::clone(shift), {@_});
-	for(keys %$newq) {
-		$q->$_($newq->{$_}); 
-	}
-	return $self->queue($q);
+	my($self, $q) = (shift, shift);
+	return $self->queue($q->make_child(@_));
 }
 
 method download_finished($q) {
