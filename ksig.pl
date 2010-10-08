@@ -32,6 +32,7 @@ use XML::Simple;
 use lib dirname(__FILE__);
 use ksig::conf;
 use ksig::Log::Dispatch::Terminal;
+use ksig::Query;
 use ksig::VariableStore;
 
 binmode(STDOUT, ":utf8");
@@ -190,17 +191,13 @@ sub irc_public :Object {
 	my($self, $who, $where, $what) = @_[0, ARG0, ARG1, ARG2];
 	my $count = 0;
 	my $nick = (split /!/, $who)[0];
-	my $q = {text => ''};
 	$what = decode_utf8($what);
+	my $q;
 	my $queue = sub {
 		if(defined $q->{type}) {
-			$q->{from} = $where->[0];
-			$q->{when} = time;
-			$q->{count} = ($count++);
-			$q->{nick} = $nick;
 			$self->queue($q);
-			$q = {text => ''};
 		}
+		$q = ksig::Query->new(count => $count++, from => $where->[0], nick => $nick);
 	};
 	for(split / /, $what) {
 		given($_) {
@@ -265,27 +262,26 @@ sub irc_msg :Object {
 			for(split / /, $what) {
 				given($_) {
 					when(m!http://img\d+\.pixiv\.net/img/.*?/(\d+)!) {
-						$self->queue({from => $who, when => time, type => 'pixivimage', id => $1});
+						$self->queue(from => $who, type => 'pixivimage', id => $1);
 					}
 					when(m!http://(?:www\.)?pixiv\.net/member_illust\.php\?mode=(?:medium|big)&illust_id=(\d+)!i) {
-						$self->queue({from => $who, when => time, type => 'pixivimage', id => $1});
+						$self->queue(from => $who, type => 'pixivimage', id => $1);
 					}
 					when(m!http://(?:www\.)?pixiv\.net/member_illust\.php\?mode=manga&illust_id=(\d+)!i) {
-						$self->queue({from => $who, when => time, type => 'pixivmanga', id => $1});
+						$self->queue(from => $who, type => 'pixivmanga', id => $1);
 					}
 					when(m!http://(?:www\.)?(danbooru\.donmai\.us|konachan\.(?:com|net)|moe.imouto.org)/post/show/(\d+)!i) {
-						my $domain = $1;
-						$self->queue({from => $who, when => time, type => 'danbooruimage', domain => $domain, id => $2});
+						$self->queue(from => $who, type => 'danbooruimage', domain => $1, id => $2);
 					}
 					when(m!^pixivbni(?:#(\d+))?!i) {
 						my $id = (defined $1 ? int($1) : $vs->get('pixiv_bookmark_new_illust_last_id'));
-						$self->queue({from => $who, when => time, type => 'pixiv_bookmark_new_illust', id => $id});
+						$self->queue(from => $who, type => 'pixiv_bookmark_new_illust', id => $id);
 					}
 					when(m!^http://www\.pixiv\.net/member_illust.php\?id=(\d+)!) {
-						$self->queue({from => $who, when => time, type => 'pixiv_member_illust', id => $1});
+						$self->queue(from => $who, type => 'pixiv_member_illust', id => $1);
 					}
 					when(m!(.*?)(http://.*)!i) {
-						$self->queue({from => $who, when => time, type => 'file', uri => $2, text => $1});
+						$self->queue(from => $who, type => 'file', uri => $2, text => $1);
 					}
 					default {
 						$poe_kernel->post($sender, 'privmsg', $nick, "Don't know how to grab '$what'.");
@@ -328,23 +324,20 @@ sub http_process_queue :Object {
 	}
 	
 	if(scalar(keys %{$self->{activequeries}}) < $conf->http_concurrent_requests) {
-		my $qid = shift(@{$self->{fetchqueue}});
-		my $q = $db->fetch('fetchqueue', ['*'], {qid => $qid}, 1);
-		
+		my $q = ksig::Query::load(shift(@{$self->{fetchqueue}}));
 		my $downloader = "download_$q->{type}";
 		if($self->$downloader($q)) {
-			my @infos = ($qid, $q->{type});
-			push @infos, $q->{id} if defined $q->{id};
-			push @infos, $q->{uri} if defined $q->{uri};
-			$log->info('Get #' . join(':', @infos));
+			if($log->is_info) {
+				$log->info('Get #' . join(':', grep { defined } $q->qid, $q->type, $q->id, $q->uri));
+			}
 			
 			$q->{starttime} = Time::HiRes::time();
 			$q->{completed_length} = 0 if !defined $q->{completed_length};
 			$q->{startpos} = $q->{completed_length};
-			$self->{activequeries}->{$qid} = $q;
+			$self->{activequeries}->{$q->qid} = $q;
 		}
 		else {
-			push @{$self->{fetchqueue}}, $qid;
+			push @{$self->{fetchqueue}}, $q->qid;
 		}
 	}
 	
@@ -355,7 +348,7 @@ sub http_process_queue :Object {
 		$poe_kernel->delay('http_process_queue', 0.1);
 	}
 	return;
-};
+}
 
 sub http_stream_q :Object {
 	my($self, $req, $qid, $res, $chunk) = ($_[0], @{$_[ARG0]}, @{$_[ARG1]});
@@ -485,30 +478,24 @@ sub stats_update :Object {
 	$poe_kernel->delay(stats_update => $conf->stats_update_frequency);
 };
 
-method queue($q) {
-	map { $q->{$_} = defined $q->{$_} ? $q->{$_} : '' } keys %$q;
-	$db->insert('fetchqueue', $q);
-	my $qid = $db->{dbh}->last_insert_id('', '', 'fetchqueue', 'qid');
+sub queue {
+	my $self = shift;
+	my $q = $_[0]->isa('ksig::Query') ? shift : ksig::Query->new(@_);
+	my $qid = $q->save->qid;
 	push @{$self->{fetchqueue}}, $qid;
-	if($log->is_debug) {
-		my @infos = ($qid, $q->{type});
-		push @infos, $q->{id} if defined $q->{id};
-		push @infos, $q->{uri} if defined $q->{uri};
-		$log->debug('Queued #' . join(':', @infos));
-	}
 	if(!$self->{_shutdown} && !$self->{downloaderactive}) {
 		$self->{downloaderactive} = 1;
 		$self->yield('http_process_queue');
 	}
-	return $qid;
+	$qid;
 }
 
-method requeue($q, ?$newq) {
-	$newq = $newq // {};
-	for(qw(type id from nick when text count desc file_dir uri file_name_ending domain)) {
-		$newq->{$_} = $q->{$_} if defined $q->{$_} && !defined $newq->{$_};
+sub requeue {
+	my($self, $q, $newq) = (shift, ksig::Query::clone(shift), {@_});
+	for(keys %$newq) {
+		$q->$_($newq->{$_}); 
 	}
-	return $self->queue($newq);
+	return $self->queue($q);
 }
 
 method download_finished($q) {
@@ -605,10 +592,10 @@ method handle_pixivimage_completion($q) {
 				return;
 			}
 			when(/member_illust.php\?mode=manga&illust_id=$q->{id}/) {
-				$self->requeue($q, {type => 'pixivmanga', id => $q->{id}});
+				$self->requeue($q, type => 'pixivmanga', id => $q->{id});
 			}
 			when(m!<title>(.*?)のイラスト \[pixiv\]</title>.*?http://(img\d+)\.pixiv\.net/img/(.*?)/$q->{id}_m.(\w+)!s) {
-				$self->requeue($q, {type => 'file', uri => "http://$2.pixiv.net/img/$3/$q->{id}.$4", file_name_ending => "pixiv $q->{id} $1.$4"});
+				$self->requeue($q, type => 'file', uri => "http://$2.pixiv.net/img/$3/$q->{id}.$4", file_name_ending => "pixiv $q->{id} $1.$4");
 			}
 			default {
 				open F, ">pixivimageregex-failed-$q->{id}";
@@ -620,7 +607,7 @@ method handle_pixivimage_completion($q) {
 	}
 	else {
 		if($buf =~ m!<title>(.*?)のイラスト \[pixiv\]</title>.*?http://(img\d+)\.pixiv\.net/img/(.*?)/$q->{id}_s.(\w+)!s) {
-			$self->requeue($q, {type => 'file', uri => "http:\/\/$2.pixiv.net\/img\/$3\/$q->{id}.$4", file_name_ending => "pixiv $q->{id} $1.$4"});
+			$self->requeue($q, type => 'file', uri => "http:\/\/$2.pixiv.net\/img\/$3\/$q->{id}.$4", file_name_ending => "pixiv $q->{id} $1.$4");
 		}
 		# Otherwise, it's probably R-18, but pixiv doesn't return anything to tell us that if we aren't logged in.
 	}
@@ -672,11 +659,11 @@ method handle_pixivmanga_completion($q) {
 	# Assumes that the file extension is the same for all the pages.
 	# Might turn out to be a problem, but it's simpler than loading and parsing each page.
 	for(0..($pagecount - 1)) {
-		$self->requeue($q, {
+		$self->requeue($q,
 			type => 'file',
 			uri => sprintf('http://%s.pixiv.net/img/%s/%d_p%d.%s', $imgserver, $username, $q->{id}, $_, $file_ext),
 			file_name_ending => sprintf('pixiv %d %s P%d.%s', $q->{id}, $title, $_, $file_ext),
-		});
+		);
 	}
 }
 
@@ -698,9 +685,9 @@ method handle_pixiv_bookmark_new_illust_completion($q) {
 			$vs->set('pixiv_bookmark_new_illust_last_id', $self->{pixiv_bni_last_id});
 			return;
 		}
-		$self->requeue($q, {type => 'pixivimage', id => $1, file_dir => "pixiv_bookmark_new_illust_from_$q->{id}"});
+		$self->requeue($q, type => 'pixivimage', id => $1, file_dir => "pixiv_bookmark_new_illust_from_$q->{id}");
 	}
-	$self->requeue($q, {uri => (defined $q->{uri} ? int($q->{uri}) + 1 : 2)});
+	$self->requeue($q, uri => (defined $q->{uri} ? int($q->{uri}) + 1 : 2));
 }
 
 method download_pixiv_member_illust($q) {
@@ -719,12 +706,12 @@ method handle_pixiv_member_illust_completion($q) {
 		my $items = int($1);
 		my $pages = ceil($items / 20);
 		if($pages > 1) {
-			$self->requeue($q, {type => 'pixiv_member_illust', id => $q->{id}, uri => $_}) for 2..$pages;
+			$self->requeue($q, type => 'pixiv_member_illust', id => $q->{id}, uri => $_) for 2..$pages;
 		}
 	}
 	
 	while($buf =~ m!member_illust\.php\?mode=medium&illust_id=(\d+)"><img src="http://img\d+.pixiv.net/img/.*?/\d+_s!g) {
-		$self->requeue($q, {type => 'pixivimage', id => $1, file_dir => "pixiv_member_illust_$q->{id}"});
+		$self->requeue($q, type => 'pixivimage', id => $1, file_dir => "pixiv_member_illust_$q->{id}");
 	}
 }
 
@@ -736,7 +723,7 @@ method download_danbooruimage($q) {
 method handle_danbooruimage_completion($q) {
 	my $r = (XMLin(decode_utf8($q->{buf})))->{post};
 	$r->{file_url} =~ /\.(\w{3,4})$/;
-	$self->requeue($q, {type => 'file', desc => $r->{tags}, uri => $r->{file_url}, file_name_ending => "$q->{domain} $q->{id}.$1"});
+	$self->requeue($q, type => 'file', desc => $r->{tags}, uri => $r->{file_url}, file_name_ending => "$q->{domain} $q->{id}.$1");
 }
 
 method check_pixiv_login($q, $buf) {
@@ -817,7 +804,7 @@ sub make_file_name {
 	if(defined $q->{when} && !$conf->file_timestamps_use_mtime) {
 		push @fn, sprintf("[%s]", get_datetime($q->{when})->strftime("%F %T"));
 	}
-	push @fn, "<$q->{nick}>" if defined $q->{nick};
+	push @fn, '<' . $q->nick . '>' if $q->nick;
 
 	my $text = defined $q->{text} ? $q->{text} : '';
 	while(length(encode_utf8(join(' ', @fn) . "$file_dir $text >> $q->{file_name_ending}")) >= 255 and $text ne '') {
@@ -848,6 +835,8 @@ sub get_datetime {
 	$when = $when->set_time_zone($conf->timezone);
 	return $when;
 }
+
+sub db { $db }
 
 ksig->spawn;
 $poe_kernel->run;
