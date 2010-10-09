@@ -327,10 +327,7 @@ sub http_process_queue :Object {
 		my $q = ksig::Query::load(shift(@{$self->{fetchqueue}}));
 		$q->app($self);
 		if($q->execute) {
-			if($log->is_info) {
-				$log->info('Get #' . join(':', grep { defined } $q->qid, $q->type, $q->id, $q->uri));
-			}
-			
+			$log->is_info && $log->info('Get #' . $q->pprint);
 			$q->{starttime} = Time::HiRes::time();
 			$q->{completed_length} = 0 if !defined $q->{completed_length};
 			$q->{startpos} = $q->{completed_length};

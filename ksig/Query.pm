@@ -46,7 +46,7 @@ package ksig::Query; {
 			$self->qid(ksig->db->{dbh}->last_insert_id('', '', 'fetchqueue', 'qid'));
 		}
 		if($log->is_debug) {
-			$log->debug('Saved Query #' . join(':', grep { defined } $self->qid, $self->type, $self->id, $self->uri));
+			$log->debug('Saved Query #' . $self->pprint);
 		}
 		$self;
 	}
@@ -68,6 +68,11 @@ package ksig::Query; {
 		my $handler = 'ksig::handle_' . $self->type . '_completion';
 		&$handler($self->app, $self);
 		$self;
+	}
+
+	sub pprint {
+		my $self = shift;
+		join ':', grep {defined} $self->qid, $self->type, $self->id, $self->uri;
 	}
 }
 
