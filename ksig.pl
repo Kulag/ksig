@@ -14,7 +14,6 @@ use File::HomeDir;
 use File::Path qw(make_path);
 use Getopt::Euclid;
 use HTTP::Cookies;
-use HTTP::Request;
 use HTTP::Request::Common;
 use List::Util qw(max min);
 use Log::Any qw($log);
