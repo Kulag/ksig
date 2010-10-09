@@ -6,7 +6,15 @@ package ksig::Query; {
 
 	sub new {
 		my $class = shift;
-		my $self = bless {@_}, $class;
+		my %params = @_;
+		if($class eq __PACKAGE__) {
+			#die Dumper(\%params);
+			my $type_class = 'ksig::Query::' . _camelize($params{type});
+			if($type_class->can('new')) {
+				return $type_class->new(%params);
+			}
+		}
+		my $self = bless \%params, $class;
 		if(!$self->when) {
 			$self->when(time);
 		}
@@ -68,6 +76,15 @@ package ksig::Query; {
 		my $handler = 'ksig::handle_' . $self->type . '_completion';
 		&$handler($self->app, $self);
 		$self;
+	}
+
+	sub _camelize {
+		$_ = shift;
+		lc;
+		s/-([a-z])/'::'.uc($1)/ge;
+		s/_([a-z])/uc($1)/ge;
+		ucfirst;
+		
 	}
 
 	sub pprint {
