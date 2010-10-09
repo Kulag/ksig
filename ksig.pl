@@ -7,7 +7,6 @@ use common::sense;
 use Data::Dumper;
 use DateTime;
 use DBI::SpeedySimple;
-use Digest::SHA1 qw(sha1_hex);
 use Encode;
 use File::BaseDir;
 use File::Basename 'dirname';
@@ -27,12 +26,12 @@ use POE qw(Component::Client::HTTP Component::IRC::State Component::IRC::Plugin:
 use POE::Component::IRC::Common qw(:ALL);
 use POSIX qw(ceil floor);
 use Time::HiRes;
-use XML::Simple;
 
 use lib dirname(__FILE__);
 use ksig::conf;
 use ksig::Log::Dispatch::Terminal;
 use ksig::Query;
+use ksig::Query::Danbooruimage;
 use ksig::VariableStore;
 
 binmode(STDOUT, ":utf8");
@@ -41,7 +40,7 @@ $|++;
 my $appdir = File::HomeDir->my_home . '/.ksig';
 mkdir $appdir if !-d $appdir;
 
-my $conf = ksig::conf->new({
+our $conf = ksig::conf->new({
 	cookies_file => File::BaseDir->cache_home('ksig', 'cookies'),
 	danbooru_username => undef, # ksig cannot download images from danbooru without this.
 	danbooru_password => undef,
@@ -702,17 +701,6 @@ method handle_pixiv_member_illust_completion($q) {
 	}
 }
 
-method download_danbooruimage($q) {
-	$poe_kernel->post('http', 'request', 'http_stream_q', make_danbooru_request($q->{domain}, 'post/index', {tags => "id:$q->{id}"}), $q->{qid});
-	return 1;
-}
-
-method handle_danbooruimage_completion($q) {
-	my $r = (XMLin(decode_utf8($q->{buf})))->{post};
-	$r->{file_url} =~ /\.(\w{3,4})$/;
-	$self->requeue($q, type => 'file', desc => $r->{tags}, uri => $r->{file_url}, file_name_ending => "$q->{domain} $q->{id}.$1");
-}
-
 method check_pixiv_login($q, $buf) {
 	given($buf) {
 		when(/value="login"/) {
@@ -773,15 +761,6 @@ sub fmt_timedelta {
 	my $s = int($ms / 1_000);
 	$ms = $ms % 1_000;
 	return sprintf("%02d:%02d:%02d.%03d", $h, $m, $s, $ms);
-}
-
-sub make_danbooru_request {
-	my($domain, $func, $options) = @_;
-	if($domain eq 'danbooru.donmai.us' && defined $conf->danbooru_username) {
-		$options->{login} = $conf->danbooru_username;
-		$options->{password_hash} = sha1_hex('choujin-steiner--' . $conf->danbooru_password . '--');
-	}
-	return HTTP::Request->new(GET => sprintf("http://%s/%s.xml?%s", $domain, $func, join("&", map { "$_=$options->{$_}" } keys %{$options})));
 }
 
 sub make_file_name {
