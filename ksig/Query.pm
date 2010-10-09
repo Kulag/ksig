@@ -8,7 +8,6 @@ package ksig::Query; {
 		my $class = shift;
 		my %params = @_;
 		if($class eq __PACKAGE__) {
-			#die Dumper(\%params);
 			my $type_class = 'ksig::Query::' . _camelize($params{type});
 			if($type_class->can('new')) {
 				return $type_class->new(%params);
