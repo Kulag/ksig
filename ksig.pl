@@ -69,6 +69,7 @@ if(!-d File::BaseDir->data_home('ksig')) {
 }
 my $db = DBI::SpeedySimple->new($conf->database);
 $db->{dbh}->do("CREATE TABLE IF NOT EXISTS fetchqueue (qid integer primary key autoincrement, `type` text, `id` text, `domain` text, `when` int, `count` int, `nick` text, `text` text, `desc` text, `uri` text, `from` text, `file_name_ending` text, `file_dir` text, recurse int);");
+$db->{dbh}->do('CREATE TABLE IF NOT EXISTS variable (`key` text primary key, `val` text);');
 my $vs = ksig::VariableStore->new($db);
 
 my $logger;
