@@ -577,7 +577,7 @@ method handle_pixivimage_completion($q) {
 				$log->info("#$q->{qid} was deleted before we got to it.");
 				return;
 			}
-			when(/member_illust.php\?mode=manga&illust_id=$q->{id}/) {
+			when(/member_illust.php\?mode=manga&amp;illust_id=$q->{id}/) {
 				$self->requeue($q, type => 'pixivmanga', id => $q->{id});
 			}
 			when(m!<title>(.*?)のイラスト \[pixiv\]</title>.*?http://(img\d+)\.pixiv\.net/img/(.*?)/$q->{id}_m.(\w+)!s) {
