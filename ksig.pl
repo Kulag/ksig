@@ -617,7 +617,7 @@ method handle_pixivmanga_completion($q) {
 		open F, ">pixivmangaregex-title-failed-$q->{id}.html";
 		print F encode_utf8($buf);
 		close F;
-		croak "pixivmanga regex title failed on $q->{id}";
+		carp "pixivmanga regex title failed on $q->{id}";
 	}
 	
 	my $pagecount;
@@ -628,18 +628,18 @@ method handle_pixivmanga_completion($q) {
 		open F, ">pixivmangaregex-pagecount-failed-$q->{id}.html";
 		print F encode_utf8($buf);
 		close F;
-		croak "pixivmanga regex pagecount failed on $q->{id}";
+		carp "pixivmanga regex pagecount failed on $q->{id}";
 	}
 
 	my($imgserver, $username, $file_ext);
-	if($buf =~ m!<img src="http://(\w+)\.pixiv\.net/img/(.*?)/$q->{id}_p\d+\.(\w+)">!) {
+	if($buf =~ m!http://(\w+)\.pixiv\.net/img/(.*?)/$q->{id}_p\d+\.(\w+)!) {
 		($imgserver, $username, $file_ext) = ($1, $2, $3);
 	}
 	else {
 		open my $f, ">pixivmangaregex-imgurl-failed-$q->{id}.html";
 		print $f encode_utf8($buf);
 		close $f;
-		croak "pixivmanga regex imgurl failed on $q->{id}";
+		carp "pixivmanga regex imgurl failed on $q->{id}";
 	}
 
 	# Assumes that the file extension is the same for all the pages.
