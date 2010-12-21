@@ -196,48 +196,29 @@ sub irc_public :Object {
 		if(defined $q->{type}) {
 			$self->queue($q);
 		}
-		$q = ksig::Query->new(count => $count++, from => $where->[0], nick => $nick);
+		$q = ksig::Query->new(count => $count++, from => $where->[0], nick => $nick, @_);
 	};
 	for(split / /, $what) {
-		given($_) {
-			when('!skip') {
-				return if $conf->irc_ignore_skipped_urls;
-			}
-			when(m!http://img\d+\.pixiv\.net/img/.*?/(\d+)!) {
-				$queue->();
-				$q->{type} = 'pixivimage';
-				$q->{id} = $1;
-			}
-			when(m!http://(?:www\.)?pixiv\.net/member_illust\.php\?mode=(?:medium|big)&illust_id=(\d+)!i) {
-				$queue->();
-				$q->{type} = 'pixivimage';
-				$q->{id} = $1;
-			}
-			when(m!http://(?:www\.)?pixiv\.net/member_illust\.php\?mode=manga&illust_id=(\d+)!i) {
-				$queue->();
-				$q->{type} = 'pixivmanga';
-				$q->{id} = $1;
-			}
-			when(m!http://(?:www\.)?(danbooru\.donmai\.us|konachan\.(?:com|net)|moe.imouto.org)/post/show/(\d+)!i) {
-				$queue->();
-				$q->{type} = 'danbooruimage';
-				$q->{domain} = $1;
-				$q->{id} = $2;
-			}
-			when(m!^(.*?)(https?://(?:www\.)?.*?\.(?:png|jpe?g|bmp|gif))(.*?)$!i) {
-				$queue->();
-				$q->{type} = 'file';
-				$q->{uri} = $2;
-				if($1) {
-					$q->{text} .= $1 . " ";
-				}
-				if($3) {
-					$q->{text} .= $3 . " ";
-				}
-			}
-			default {
-				$q->{text} .= "$_ ";
-			}
+		return if $_ eq '!skip' and $conf->irc_ignore_skipped_urls;
+		if (m!http://img\d+\.pixiv\.net/img/.*?/(\d+)!) {
+			$queue->(type => 'pixivimage', id => $1);
+		}
+		elsif (m!http://(?:www\.)?pixiv\.net/member_illust\.php\?mode=(?:medium|big)&illust_id=(\d+)!i) {
+			$queue->(type => 'pixivimage', id => $1);
+		}
+		elsif (m!http://(?:www\.)?pixiv\.net/member_illust\.php\?mode=manga&illust_id=(\d+)!i) {
+			$queue->(type => 'pixivmanga', id => $1);
+		}
+		elsif (m!http://(?:www\.)?(danbooru\.donmai\.us|konachan\.(?:com|net)|(?:moe|oreno).imouto.org)/post/show/(\d+)!i) {
+			$queue->(type => 'danbooruimage', domain => $1, id => $2);
+		}
+		elsif (m!^(.*?)(https?://(?:www\.)?.*?\.(?:png|jpe?g|bmp|gif))(.*?)$!i) {
+			$queue->(type => 'file', uri => $2);
+			$q->{text} .= $1 . " " if $1;
+			$q->{text} .= $3 . " " if $3;
+		}
+		else {
+			$q->{text} .= "$_ ";
 		}
 	}
 	$queue->();
