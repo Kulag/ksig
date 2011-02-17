@@ -16,11 +16,10 @@ use common::sense;
 use Config::Std;
 use File::BaseDir;
 use List::MoreUtils qw(zip);
-use Perl6::Caller;
 
 sub new {
 	my($class, $conf, %opts) = @_;
-	my $package = caller->package;
+	my $package = caller;
 	my $self = bless $conf, $class;
 
 	my $configfile = delete $self->{configfile};

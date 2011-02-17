@@ -44,7 +44,6 @@ requires:
   POE::Component::IRC::State: 0
   POE::Session::Attribute: 0
   POSIX: 0
-  Perl6::Caller: 0
   Perl6::Subs: 0
   Readonly: 0
   Time::HiRes: 0

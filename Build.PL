@@ -42,7 +42,6 @@ my %module_build_args = (
 		'Log::Any'          => '0',
 		'Log::Any::Adapter::Dispatch' => '0',
 		'Log::Dispatch'     => '0',
-		'Perl6::Caller'     => '0',
 		'Perl6::Subs'       => '0',
 		'POE'               => '0',
 		'POE::Component::Client::HTTP'             => '0',
