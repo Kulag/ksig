@@ -591,46 +591,32 @@ method handle_pixivmanga_completion($q) {
 	return if !$self->check_pixiv_login($q, $buf);
 
 	my $title;
-	if($buf =~ m!<title>(.*?)の漫画 \[pixiv\]</title>!) {
-		$title = $1;
+	if($buf =~ m!<div class="title">.*?<a href="/member_illust.*?>(.*?)</a>.*?href="/member.*?>.*?>\s*(.*?)</a>!ms) {
+		$title = '「' . $1 . '」/「' . $2 . '」';
 	}
 	else {
-		open F, ">pixivmangaregex-title-failed-$q->{id}.html";
-		print F encode_utf8($buf);
-		close F;
+		open my $f, '>', "pixivmangaregex-title-failed-$q->{id}.html";
+		print $f encode_utf8($buf);
+		close $f;
 		carp "pixivmanga regex title failed on $q->{id}";
 	}
-	
-	my $pagecount;
-	if($buf =~ m!1 / (\d+) p!) {
-		$pagecount = int($1);
-	}
-	else {
-		open F, ">pixivmangaregex-pagecount-failed-$q->{id}.html";
-		print F encode_utf8($buf);
-		close F;
-		carp "pixivmanga regex pagecount failed on $q->{id}";
+
+	my $found;
+	while ($buf =~ m!http://(\w+)\.pixiv\.net/img/(.*?)/$q->{id}_p(\d+)\.(\w+)!g) {
+		my($imgserver, $username, $page_number, $file_ext) = ($1, $2, $3, $4);
+		$self->requeue($q,
+			type => 'file',
+			uri => sprintf('http://%s.pixiv.net/img/%s/%d_p%d.%s', $imgserver, $username, $q->{id}, $page_number, $file_ext),
+			file_name_ending => sprintf('pixiv %d %s P%d.%s', $q->{id}, $title, $page_number, $file_ext),
+		);
+		$found++;
 	}
 
-	my($imgserver, $username, $file_ext);
-	if($buf =~ m!http://(\w+)\.pixiv\.net/img/(.*?)/$q->{id}_p\d+\.(\w+)!) {
-		($imgserver, $username, $file_ext) = ($1, $2, $3);
-	}
-	else {
-		open my $f, ">pixivmangaregex-imgurl-failed-$q->{id}.html";
+	unless ($found) {
+		open my $f, '>', "pixivmangaregex-imgurl-failed-$q->{id}.html";
 		print $f encode_utf8($buf);
 		close $f;
 		carp "pixivmanga regex imgurl failed on $q->{id}";
-	}
-
-	# Assumes that the file extension is the same for all the pages.
-	# Might turn out to be a problem, but it's simpler than loading and parsing each page.
-	for(0..($pagecount - 1)) {
-		$self->requeue($q,
-			type => 'file',
-			uri => sprintf('http://%s.pixiv.net/img/%s/%d_p%d.%s', $imgserver, $username, $q->{id}, $_, $file_ext),
-			file_name_ending => sprintf('pixiv %d %s P%d.%s', $q->{id}, $title, $_, $file_ext),
-		);
 	}
 }
 
