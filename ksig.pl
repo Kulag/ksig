@@ -469,7 +469,7 @@ sub queue {
 
 sub requeue {
 	my($self, $q) = (shift, shift);
-	return $self->queue($q->make_child(@_));
+	return $self->queue($q->procreate(@_));
 }
 
 method download_finished($q) {
