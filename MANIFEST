@@ -1,7 +1,10 @@
 Build.PL
 ksig.cfg.example
 ksig.pl
-ksig/conf.pm
-ksig/VariableStore.pm
+lib/ksig/conf.pm
+lib/ksig/VariableStore.pm
+lib/ksig/Query.pm
+lib/ksig/Query/Danbooruimage.pm
+lib/ksig/Log/Dispatch/Terminal.pm
 MANIFEST			This list of files
 META.yml
