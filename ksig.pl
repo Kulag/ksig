@@ -59,10 +59,10 @@ our $conf = ksig::conf->new({
 	use_windows_compatible_filenames => 0,
 });
 if(!-d File::BaseDir->cache_home('ksig')) {
-	mkdir File::BaseDir->cache_home('ksig')
+	make_path File::BaseDir->cache_home('ksig')
 }
 if(!-d File::BaseDir->data_home('ksig')) {
-	mkdir File::BaseDir->data_home('ksig')
+	make_path File::BaseDir->data_home('ksig')
 }
 my $db = DBI::SpeedySimple->new($conf->database);
 $db->{dbh}->do("CREATE TABLE IF NOT EXISTS fetchqueue (qid integer primary key autoincrement, `type` text, `id` text, `domain` text, `when` int, `count` int, `nick` text, `text` text, `desc` text, `uri` text, `from` text, `file_name_ending` text, `file_dir` text, recurse int);");
