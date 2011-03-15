@@ -454,7 +454,7 @@ sub stats_update :Object {
 
 sub queue {
 	my $self = shift;
-	my $q = $_[0]->isa('ksig::Query') ? shift : ksig::Query->new(@_);
+	my $q = ref $_[0] eq 'ksig::Query' ? shift : ksig::Query->new(@_);
 	my $qid = $q->save->qid;
 	push @{$self->{fetchqueue}}, $qid;
 	if(!$self->{_shutdown} && !$self->{downloaderactive}) {
@@ -671,7 +671,7 @@ method check_pixiv_login($q, $buf) {
 			# We aren't logged in.
 			if(!$self->{pixivloggingin}) {
 				$self->{pixivloggingin} = 1;
-				$self->queue({type => 'pixivlogin'});
+				$self->queue(type => 'pixivlogin');
 			}
 			$self->requeue($q);
 			return 0;
@@ -684,7 +684,7 @@ method check_pixiv_login($q, $buf) {
 		when(/エラーが発生しました/) { # An error has occured.
 			if(!$self->{pixivloggingin}) {
 				$self->{pixivloggingin} = 1;
-				$self->queue({type => 'pixivrelogin'});
+				$self->queue(type => 'pixivrelogin');
 			}
 			$self->requeue($q);
 			return 0;
