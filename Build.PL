@@ -8,13 +8,6 @@ use Module::Build 0.3601;
 my %module_build_args = (
 	'dist_abstract' => 'IRC bot that automatically downloads picture links',
 	'script_files'  => ['ksig.pl'],
-	'pm_files'      => {
-		'ksig/conf.pm' => 'lib/ksig/conf.pm',
-		'ksig/VariableStore.pm' => 'lib/ksig/VariableStore.pm',
-		'ksig/Log/Dispatch/Terminal.pm' => 'lib/ksig/Log/Dispatch/Terminal.pm',
-		'ksig/Query.pm' => 'lib/ksig/Query.pm',
-		'ksig/Query/Danbooruimage.pm' => 'lib/ksig/Query/Danbooruimage.pm',
-	},
 	'license'       => 'isc',
 	'dist_name'     => 'ksig',
 	'dist_author'   => 'Kulag',

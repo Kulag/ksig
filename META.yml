@@ -11,10 +11,16 @@ meta-spec:
   version: 1.4
 name: ksig
 provides:
+  ksig::Log::Dispatch::Terminal:
+    file: lib/ksig/Log/Dispatch/Terminal.pm
+  ksig::Query:
+    file: lib/ksig/Query.pm
+  ksig::Query::Danbooruimage:
+    file: lib/ksig/Query/Danbooruimage.pm
   ksig::VariableStore:
-    file: ksig/VariableStore.pm
+    file: lib/ksig/VariableStore.pm
   ksig::conf:
-    file: ksig/conf.pm
+    file: lib/ksig/conf.pm
 requires:
   Carp: 0
   Class::Accessor: 0

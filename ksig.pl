@@ -26,7 +26,6 @@ use POE::Component::IRC::Common qw(:ALL);
 use POSIX qw(ceil floor);
 use Time::HiRes;
 
-use lib dirname(__FILE__);
 use ksig::conf;
 use ksig::Log::Dispatch::Terminal;
 use ksig::Query;
