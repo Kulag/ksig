@@ -36,9 +36,6 @@ use ksig::VariableStore;
 binmode(STDOUT, ":utf8");
 $|++;
 
-my $appdir = File::HomeDir->my_home . '/.ksig';
-mkdir $appdir if !-d $appdir;
-
 our $conf = ksig::conf->new({
 	cookies_file => File::BaseDir->cache_home('ksig', 'cookies'),
 	danbooru_username => undef, # ksig cannot download images from danbooru without this.
