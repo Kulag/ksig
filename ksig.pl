@@ -628,7 +628,7 @@ method handle_pixiv_bookmark_new_illust_completion($q) {
 	my $buf = decode_utf8($q->{buf});
 	return if !$self->check_pixiv_login($q, $buf);
 	
-	while($buf =~ m!src="http://img\d+.pixiv.net/img/.+?/(\d+)_s.\w+" alt=".+?"!g) {
+	while($buf =~ m!member_illust\.php\?mode=medium&amp;illust_id=(\d+)"><p><img src="http://img\d+.pixiv.net/img/.*?/\d+_s!g) {
 		$self->{pixiv_bni_last_id} = int($1) if !defined $self->{pixiv_bni_last_id} || int($1) > $self->{pixiv_bni_last_id};
 		if(int($1) <= $q->{id}) {
 			$vs->set('pixiv_bookmark_new_illust_last_id', $self->{pixiv_bni_last_id});
