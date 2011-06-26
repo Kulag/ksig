@@ -5,10 +5,9 @@ use Log::Any qw($log);
 __PACKAGE__->mk_accessors(qw(qid type id from nick when text count desc file_dir uri file_name_ending domain app));
 
 sub new {
-	my $class = shift;
-	my %params = @_;
+	my ($class, %params) = @_;
 	if($class eq __PACKAGE__) {
-	my $type_class = 'ksig::Query::' . _camelize($params{type});
+		my $type_class = 'ksig::Query::' . _camelize($params{type});
 		if($type_class->can('new')) {
 			return $type_class->new(%params);
 		}
@@ -23,18 +22,13 @@ sub new {
 	$self;
 }
 
-sub clone {
-	my $self = shift;
-	ksig::Query->new(map { $_, $self->{$_} } qw(type id from nick when text count desc file_dir uri file_name_ending domain));
-}
-
 sub procreate {
-	my($self, $new_data) = (shift, {@_});
-	my $q = ksig::Query::clone($self);
-	for(keys %$new_data) {
-		$q->$_($new_data->{$_}); 
+	my($self, %new_data) = @_;
+	my %q = map { $_, $self->{$_} } grep { $self->{$_} } qw(type id from nick when text count desc file_dir uri file_name_ending domain);
+	for(keys %new_data) {
+		$q{$_} = $new_data{$_};
 	}
-	$q;
+	ksig::Query->new(%q);
 }
 
 sub load {

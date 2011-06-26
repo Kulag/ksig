@@ -246,7 +246,7 @@ sub irc_msg :Object {
 					when(m!http://(?:www\.)?pixiv\.net/member_illust\.php\?mode=manga&illust_id=(\d+)!i) {
 						$self->queue(from => $who, type => 'pixivmanga', id => $1);
 					}
-					when(m!http://(?:www\.)?(danbooru\.donmai\.us|konachan\.(?:com|net)|moe.imouto.org)/post/show/(\d+)!i) {
+					when(m!http://(?:www\.)?(danbooru\.donmai\.us|konachan\.(?:com|net)|(?:moe|oreno).imouto.org)/post/show/(\d+)!i) {
 						$self->queue(from => $who, type => 'danbooruimage', domain => $1, id => $2);
 					}
 					when(m!^pixivbni(?:#(\d+))?!i) {
@@ -453,7 +453,7 @@ sub stats_update :Object {
 
 sub queue {
 	my $self = shift;
-	my $q = ref $_[0] eq 'ksig::Query' ? shift : ksig::Query->new(@_);
+	my $q = ref $_[0] && $_[0]->isa('ksig::Query') ? shift : ksig::Query->new(@_);
 	my $qid = $q->save->qid;
 	push @{$self->{fetchqueue}}, $qid;
 	if(!$self->{_shutdown} && !$self->{downloaderactive}) {
